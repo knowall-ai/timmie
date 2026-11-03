@@ -28,21 +28,20 @@ https://github.com/knowall-ai/timmie-bc-extension in every environment Timmie us
 
 [source,bash]
 ----
-# Create resource group
-az group create --name timmie-rg --location westeurope
+# Resource group: Timmie lives in the shared KnowAllAIRG (UK South), so there is nothing to create
 
 # Create App Service plan (Linux, B1)
 az appservice plan create \
-  --name timmie-plan \
-  --resource-group timmie-rg \
+  --name ka-timmie-plan \
+  --resource-group KnowAllAIRG \
   --sku B1 \
   --is-linux
 
 # Create web app
 az webapp create \
   --name timmie-knowall \
-  --resource-group timmie-rg \
-  --plan timmie-plan \
+  --resource-group KnowAllAIRG \
+  --plan ka-timmie-plan \
   --runtime "NODE:20-lts"
 ----
 
@@ -53,13 +52,13 @@ az webapp create \
 # Add custom domain
 az webapp config hostname add \
   --webapp-name timmie-knowall \
-  --resource-group timmie-rg \
+  --resource-group KnowAllAIRG \
   --hostname gettimm.ie
 
 # Enable HTTPS (after DNS verification)
 az webapp config ssl bind \
   --name timmie-knowall \
-  --resource-group timmie-rg \
+  --resource-group KnowAllAIRG \
   --certificate-thumbprint <cert-thumbprint> \
   --ssl-type SNI
 ----
@@ -286,7 +285,7 @@ npm run build
 # Or use Azure CLI
 az webapp deployment source config-zip \
   --name timmie-knowall \
-  --resource-group timmie-rg \
+  --resource-group KnowAllAIRG \
   --src deploy.zip
 ----
 
