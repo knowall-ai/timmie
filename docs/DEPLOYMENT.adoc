@@ -42,7 +42,7 @@ az webapp create \
   --name timmie-knowall \
   --resource-group KnowAllAIRG \
   --plan ka-timmie-plan \
-  --runtime "NODE:20-lts"
+  --runtime "NODE:24-lts"
 ----
 
 === 2. Configure Custom Domain
