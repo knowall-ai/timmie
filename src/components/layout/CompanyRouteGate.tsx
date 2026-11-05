@@ -1,7 +1,8 @@
 'use client';
 
-import { Fragment, ReactNode, useEffect, useMemo } from 'react';
+import { Fragment, ReactNode, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
 import { BuildingOffice2Icon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { AuthenticatedTemplate, UnauthenticatedTemplate } from '@/services/auth';
 import { bcClient } from '@/services/bc/bcClient';
@@ -24,6 +25,8 @@ import {
 } from '@/utils/companyPath';
 import { Layout } from './Layout';
 import { SignInExpired } from './SignInExpired';
+import { isDemoCompany, startDemo } from '@/services/demo/demoMode';
+import { useCanStartDemo, useIsDemoMode } from '@/services/demo/useIsDemoMode';
 
 interface CompanyRouteGateProps {
   environment: BCEnvironmentType;
@@ -42,6 +45,35 @@ interface CompanyRouteGateProps {
  * have it.
  */
 export function CompanyRouteGate({ environment, companyId, children }: CompanyRouteGateProps) {
+  // A link into the demo company opens the demo (it's the only place that company exists).
+  // If the browser blocks the storage the demo needs, say so and treat the link as any
+  // other company's, rather than wait for a demo that can't start.
+  const isDemo = useIsDemoMode();
+  const canStart = useCanStartDemo();
+  // Set if the flag still can't be written when the demo starts (canStartDemo probes
+  // a write, so this is a race at most)
+  const [startFailed, setStartFailed] = useState(false);
+  const demoLink = !isDemo && isDemoCompany(companyId);
+  const openDemo = demoLink && canStart && !startFailed;
+  useEffect(() => {
+    if (!openDemo) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a one-off fallback, not a loop
+    if (!startDemo(`${window.location.pathname}${window.location.search}`)) setStartFailed(true);
+  }, [openDemo]);
+  useEffect(() => {
+    if (demoLink && (!canStart || startFailed)) {
+      toast.error('The demo needs browser storage, which this browser is blocking.');
+    }
+  }, [demoLink, canStart, startFailed]);
+  if (openDemo) {
+    return (
+      <div className="bg-dark-950 flex min-h-screen items-center justify-center" role="status">
+        <div className="border-knowall-green h-8 w-8 animate-spin rounded-full border-b-2" />
+        <span className="text-dark-400 ml-3 text-sm">Opening the demo...</span>
+      </div>
+    );
+  }
+
   return (
     <>
       <UnauthenticatedTemplate>
