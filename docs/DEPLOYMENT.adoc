@@ -28,7 +28,8 @@ https://github.com/knowall-ai/timmie-bc-extension in every environment Timmie us
 
 [source,bash]
 ----
-# Resource group: Timmie lives in the shared KnowAllAIRG (UK South), so there is nothing to create
+# Resource group: Timmie lives in the shared KnowAllAIRG (UK South), so there is nothing to create.
+# The plan and web app below already exist too; run these commands only to rebuild from scratch.
 
 # Create App Service plan (Linux, B1)
 az appservice plan create \
