@@ -224,7 +224,8 @@ protection). Other contributors must release via a PR — see the next section.
 
 === Releasing as a non-admin (via PR)
 
-Non-admin contributors cannot push the version-bump commit directly to `main`.
+Non-admin contributors cannot push the version-bump commit directly to `main`,
+and only admins and maintainers can push `v*` tags (see <<Who can deploy what>>).
 The release flow becomes:
 
 [source,bash]
@@ -246,7 +247,9 @@ git push -u origin release/v1.2.1
 gh pr create --fill
 #    …or open the PR from the branch page in the GitHub web UI.
 
-# 4. After the PR is merged, tag the merge commit on main and push the tag.
+# 4. After the PR is merged, ask an admin or maintainer to tag the merge
+#    commit on main and push the tag. The tag ruleset rejects the push from
+#    anyone else, so the deploy would not start.
 git switch main && git pull --ff-only
 git tag v1.2.1
 git push origin v1.2.1
