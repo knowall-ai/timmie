@@ -165,6 +165,17 @@ describe('without settings storage (production, no ORG_SETTINGS_TABLE_ENDPOINT)'
     expect(await response.json()).toEqual({ code: 'settings_not_configured' });
   });
 
+  it("answers 503, not 500, when the store can't even be created", async () => {
+    setOrgSettingsStore(null);
+    vi.stubEnv('ORG_SETTINGS_TABLE_ENDPOINT', 'not-a-url');
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const token = await idToken(CONTOSO, [TIMMIE_ADMIN_ROLE]);
+    for (const response of [await get(token), await put(token, { agent: CUSTOM_AGENT })]) {
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({ code: 'settings_unavailable' });
+    }
+  });
+
   it('is what a production server without the setting uses', () => {
     setOrgSettingsStore(null);
     vi.stubEnv('ORG_SETTINGS_TABLE_ENDPOINT', '');

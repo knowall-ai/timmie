@@ -28,19 +28,18 @@ async function request(init: RequestInit = {}): Promise<OrgSettings> {
     headers: { ...init.headers, Authorization: `Bearer ${idToken}` },
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
-  if (response.status === 403) {
-    throw new OrgSettingsError('Only Timmie administrators can change this.');
-  }
-  if (response.status === 400) throw new OrgSettingsError('That agent name isn’t valid.');
-  if (response.status === 503) {
+  if (!response.ok) {
+    // The server says why with a code; a 403 without one is an unapproved organisation
     const { code } = (await response.json().catch(() => ({}))) as { code?: unknown };
+    if (code === 'not_admin') {
+      throw new OrgSettingsError('Only Timmie administrators can change this.');
+    }
     if (code === 'settings_not_configured') {
       throw new OrgSettingsError(
         'This Timmie server has no settings storage, so it can’t save this.'
       );
     }
-  }
-  if (!response.ok) {
+    if (response.status === 400) throw new OrgSettingsError('That agent name isn’t valid.');
     throw new OrgSettingsError(`Settings are unavailable right now (${response.status}).`);
   }
 

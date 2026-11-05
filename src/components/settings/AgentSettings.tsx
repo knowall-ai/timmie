@@ -77,7 +77,11 @@ export function AgentSettings() {
     setError(null);
     try {
       await save(next);
-      toast.success(`Timmie now works with ${next.name}`);
+      toast.success(
+        next.kind === 'timmie'
+          ? 'Timmie now uses its own agent'
+          : `Timmie now works with ${next.name}`
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save the agent.');
     } finally {
@@ -151,7 +155,8 @@ export function AgentSettings() {
             />
             {name && !customName && (
               <p className="mt-2 text-sm text-red-400">
-                Start with a letter; use letters, numbers, spaces, hyphens and apostrophes.
+                Start with a letter; use letters, numbers, spaces, full stops, hyphens and
+                apostrophes.
               </p>
             )}
           </div>

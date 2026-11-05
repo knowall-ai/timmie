@@ -77,7 +77,14 @@ export async function PUT(request: NextRequest): Promise<Response> {
     return Response.json({ code: 'not_admin' }, { status: 403, headers });
   }
 
-  const store = getOrgSettingsStore();
+  // Creating the store can fail too (a malformed ORG_SETTINGS_TABLE_ENDPOINT), so it's inside
+  // a try like the read is: 503 with the cause logged, not an unexplained 500
+  let store;
+  try {
+    store = getOrgSettingsStore();
+  } catch (error) {
+    return storeUnavailable(error);
+  }
   if (!store.writable) {
     return Response.json({ code: 'settings_not_configured' }, { status: 503, headers });
   }
