@@ -3,7 +3,6 @@ name: PR Lint
 on:
   pull_request:
     types: [opened, edited, reopened, synchronize]
-    branches: [main]
 
 permissions:
   pull-requests: read
