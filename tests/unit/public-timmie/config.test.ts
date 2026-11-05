@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { frontDoorId } from '@/services/contact/requestGuards';
 import { publicClientIp } from '@/services/public-timmie/client-ip';
 import {
-  frontDoorId,
   powBits,
   publicAzureConfig,
   publicLiveConfig,
@@ -74,12 +74,21 @@ describe('client IP and the Front Door check', () => {
     expect(publicClientIp(h({}), undefined)).toEqual({ ok: true, ip: 'unknown' });
   });
 
-  it('reads PUBLIC_FRONT_DOOR_ID, or the shared FRONT_DOOR_ID', () => {
-    vi.stubEnv('PUBLIC_FRONT_DOOR_ID', '');
-    vi.stubEnv('FRONT_DOOR_ID', 'shared-id');
-    expect(frontDoorId()).toBe('shared-id');
+  it('reads the one shared FRONT_DOOR_ID setting (the old PUBLIC_ alias is ignored)', () => {
+    vi.stubEnv('FRONT_DOOR_ID', '  shared-id ');
     vi.stubEnv('PUBLIC_FRONT_DOOR_ID', 'public-id');
-    expect(frontDoorId()).toBe('public-id');
+    expect(frontDoorId()).toBe('shared-id');
+    vi.stubEnv('FRONT_DOOR_ID', '');
+    expect(frontDoorId()).toBeUndefined();
+  });
+
+  it('matches the Front Door id case-insensitively, like the enquiry form', () => {
+    expect(
+      publicClientIp(
+        h({ 'x-azure-fdid': FDID.toUpperCase(), 'x-azure-socketip': '198.51.100.7' }),
+        FDID
+      )
+    ).toEqual({ ok: true, ip: '198.51.100.7' });
   });
 });
 

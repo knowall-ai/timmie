@@ -239,7 +239,8 @@ send them on, and the allow-list hangs up if any of them, or anything else unexp
 | Spoofing the client IP to dodge limits
 | Behind Azure Front Door the right-most `X-Forwarded-For` is Front Door's own address, so it is
   never used there. `X-Azure-SocketIP` is trusted only when `X-Azure-FDID` matches
-  `PUBLIC_FRONT_DOOR_ID` (or `FRONT_DOOR_ID`); a request without our Front Door id is refused (403).
+  `FRONT_DOOR_ID` (the same setting the enquiry form uses); a request without our Front Door id
+  is refused (403).
   Because the id isn't secret, the App Service must also accept traffic only from Front Door (an
   access restriction on the service tag and this id). See <<client-ip>>.
 
@@ -311,9 +312,11 @@ store first. Defined in `services/public-timmie/rate-limit.ts`, `pass.ts` and `s
 
 `services/public-timmie/client-ip.ts`:
 
-* *Front Door configured* (`PUBLIC_FRONT_DOOR_ID`, or the shared `FRONT_DOOR_ID`): the request must
-  carry that `X-Azure-FDID`; then `X-Azure-SocketIP` (the address that connected to Front Door) is
-  the visitor. Anything else gets 403.
+* *Front Door configured* (`FRONT_DOOR_ID`, the one setting shared with the enquiry form; see
+  DEPLOYMENT.adoc): the request must carry that `X-Azure-FDID`; then `X-Azure-SocketIP` (the address
+  that connected to Front Door) is the visitor. Anything else gets 403. (The enquiry form is more
+  lenient and falls back to `X-Forwarded-For`; the helper spends money per request, so it fails
+  closed.)
 * *Required with Front Door: restrict the App Service to it.* The profile id is not a secret
   (anyone can learn it), so on its own it doesn't prove a request came through Front Door. Add an
   App Service access restriction that allows only the `AzureFrontDoor.Backend` service tag *with
@@ -373,7 +376,7 @@ All server-side App Service settings, read at request time (no rebuild). `PUBLIC
 | `PUBLIC_AZURE_OPENAI_ENDPOINT` | Text chat: the same public resource, `https://<resource>.openai.azure.com`.
 | `PUBLIC_TIMMIE_CHAT_DEPLOYMENT` | Text chat: the chat model deployment. Unset: chat is off.
 | `PUBLIC_AZURE_OPENAI_API_KEY` | Text chat: fallback only. The managed identity is used first.
-| `PUBLIC_FRONT_DOOR_ID` (or `FRONT_DOOR_ID`) | The Azure Front Door profile id; see <<client-ip>>.
+| `FRONT_DOOR_ID` | The Azure Front Door profile id, shared with the enquiry form; see <<client-ip>>.
 | `PUBLIC_TURNSTILE_SITE_KEY`, `PUBLIC_TURNSTILE_SECRET` | Cloudflare Turnstile; both set to use it (and to allow its frame in the CSP).
 | `PUBLIC_TIMMIE_POW_BITS`, `PUBLIC_TIMMIE_VOICE_POW_BITS` | Proof-of-work difficulty, 8 to 24 (16 and 18 by default; voice is never easier than chat).
 | `PUBLIC_TIMMIE_ALLOWED_ORIGINS` | Extra allowed origins, comma-separated, e.g. a staging slot. gettimm.ie and timmie.knowall.ai are built in.
@@ -438,7 +441,7 @@ az role assignment create --assignee <principal-id-from-above> \
 . *A monthly budget with alerts* (e.g. 50%, 80%, 100%) on the resource group.
 . *App Service settings*: `PUBLIC_TIMMIE_SECRET`, `PUBLIC_LIVE_ENDPOINT`, `PUBLIC_LIVE_DEPLOYMENT`,
   `PUBLIC_AZURE_OPENAI_ENDPOINT`, `PUBLIC_TIMMIE_CHAT_DEPLOYMENT`, and, behind Front Door,
-  `PUBLIC_FRONT_DOOR_ID`.
+  the shared `FRONT_DOOR_ID` (already set for the enquiry form).
 . *Optional, Cloudflare Turnstile*: create a Turnstile widget for gettimm.ie and timmie.knowall.ai
   (mode *Managed*), then set `PUBLIC_TURNSTILE_SITE_KEY` and `PUBLIC_TURNSTILE_SECRET`.
 . *Record the greetings* (<<greetings>>), then commit the clips.

@@ -1,7 +1,7 @@
-// Timmie's same-site check (a pure module, no imports), shared with the enquiry form.
-import { isSameOrigin } from '@/services/contact/requestGuards';
+// Timmie's same-site and Front Door checks (a pure module, no imports), shared with the enquiry form.
+import { frontDoorId, isSameOrigin } from '@/services/contact/requestGuards';
 import { publicClientIp } from './client-ip';
-import { extraAllowedOrigins, frontDoorId, publicTimmieEnabled, secretProblem } from './config';
+import { extraAllowedOrigins, publicTimmieEnabled, secretProblem } from './config';
 import { spendPass, verifyPass, type VerifiedPass } from './pass';
 import type { RateLimiter } from './rate-limit';
 import { PASS_HEADER } from './shared';

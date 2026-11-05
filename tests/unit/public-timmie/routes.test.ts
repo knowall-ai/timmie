@@ -195,8 +195,8 @@ describe('/api/public/pass', () => {
 });
 
 describe('Front Door', () => {
-  it('with PUBLIC_FRONT_DOOR_ID set, a request not from that Front Door is refused', async () => {
-    vi.stubEnv('PUBLIC_FRONT_DOOR_ID', 'our-front-door');
+  it('with FRONT_DOOR_ID set, a request not from that Front Door is refused', async () => {
+    vi.stubEnv('FRONT_DOOR_ID', 'our-front-door');
     expect((await getChallenge(req('/api/public/pass'))).status).toBe(403);
     const forged = await getChallenge(
       req('/api/public/pass', {

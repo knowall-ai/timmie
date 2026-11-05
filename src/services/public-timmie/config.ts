@@ -129,12 +129,8 @@ export function publicLiveConfig(): PublicLiveConfig | undefined {
   };
 }
 
-// ---- Front Door and origins -----------------------------------------------
-
-/** The Azure Front Door profile id (X-Azure-FDID) whose X-Azure-SocketIP we trust. */
-export function frontDoorId(): string | undefined {
-  return env('PUBLIC_FRONT_DOOR_ID') ?? env('FRONT_DOOR_ID');
-}
+// ---- Origins --------------------------------------------------------------
+// (The Front Door id is the shared FRONT_DOOR_ID, read by services/contact/requestGuards.)
 
 /** Extra site origins allowed to call /api/public/* (staging slots and the like). */
 export function extraAllowedOrigins(): string[] {

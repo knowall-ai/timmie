@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto';
+import { fromOurFrontDoor } from '@/services/contact/requestGuards';
 
 /**
  * The visitor's IP address for Ask Timmie's rate limits and pass binding.
@@ -8,20 +8,16 @@ import { timingSafeEqual } from 'node:crypto';
  * (the address that connected to it) and X-Azure-FDID (its profile id), and both can be
  * forged by anyone who reaches the App Service directly. So:
  *
- *  - Front Door configured (PUBLIC_FRONT_DOOR_ID or FRONT_DOOR_ID): the request must carry
- *    that X-Azure-FDID, and then X-Azure-SocketIP is the visitor. Anything else is refused
- *    (403): it didn't come through our Front Door.
+ *  - Front Door configured (FRONT_DOOR_ID, the same setting the enquiry form uses): the
+ *    request must carry that X-Azure-FDID, and then X-Azure-SocketIP is the visitor.
+ *    Anything else is refused (403): it didn't come through our Front Door. (The enquiry
+ *    form is lenient and falls back to X-Forwarded-For; this helper spends money per
+ *    request, so it fails closed.)
  *  - Not configured (local development, or no Front Door in front): X-Azure-* headers are
  *    ignored and the address is the one that connected to App Service (or the Next server
  *    locally): the last X-Forwarded-For entry, which App Service appends itself.
  */
 export type ClientIpResult = { ok: true; ip: string } | { ok: false; reason: 'front-door' };
-
-const sameText = (a: string, b: string) => {
-  const x = Buffer.from(a);
-  const y = Buffer.from(b);
-  return x.length === y.length && timingSafeEqual(x, y);
-};
 
 function stripPort(value: string): string {
   const v6 = /^\[([^\]]+)\](?::\d+)?$/.exec(value);
@@ -32,8 +28,7 @@ function stripPort(value: string): string {
 
 export function publicClientIp(headers: Headers, frontDoorId: string | undefined): ClientIpResult {
   if (frontDoorId) {
-    const fdid = headers.get('x-azure-fdid')?.trim().toLowerCase() ?? '';
-    if (!fdid || !sameText(fdid, frontDoorId.trim().toLowerCase())) {
+    if (!headers.get('x-azure-fdid')?.trim() || !fromOurFrontDoor(headers, frontDoorId)) {
       return { ok: false, reason: 'front-door' };
     }
     const socket = headers.get('x-azure-socketip')?.trim();
