@@ -376,10 +376,13 @@ function PlanReviewPopover({
   const sorted = sortSubjects(subjects);
   // The saved reviews are credited to whoever signed them, which may be a previous agent. A
   // week whose subjects were reviewed by different agents gets a neutral heading, and each
-  // subject says who reviewed it.
-  const reviewers = [...new Set(sorted.map((s) => s.review?.reviewer?.trim()).filter(Boolean))];
-  const reviewer = reviewers.length === 1 ? reviewers[0] : undefined;
+  // subject says who reviewed it. A review with no reviewer name counts as the configured
+  // agent's, as SubjectReview shows it.
+  const reviewers = [
+    ...new Set(sorted.filter((s) => s.review).map((s) => s.review?.reviewer?.trim() || agentName)),
+  ];
   const mixedReviewers = reviewers.length > 1;
+  const reviewer = mixedReviewers ? undefined : reviewers[0];
   const weekEnd = format(parseISO(weekStart), 'd MMM');
 
   return createPortal(

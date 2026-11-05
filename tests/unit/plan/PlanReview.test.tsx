@@ -190,6 +190,27 @@ describe('PlanReview popover', () => {
     ).toHaveTextContent('by Contoso Bot');
   });
 
+  it("counts a review with no reviewer name as the organisation's agent's", () => {
+    renderChip(
+      context([
+        subject(),
+        subject({
+          subjectNo: 'R0020',
+          name: 'Sam Contoso',
+          review: review({ entryNo: 2, reviewer: '' }),
+        }),
+      ])
+    );
+    const dialog = openPopover();
+    expect(dialog).toHaveAccessibleName(/^Plan review · Week 43/);
+    expect(
+      within(dialog).getByRole('button', { name: /^Alex Contoso: .*reviewed by Poppie\./ })
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole('button', { name: /^Sam Contoso: .*reviewed by Timmie\./ })
+    ).toBeInTheDocument();
+  });
+
   it('hides Apply change and Ask Timmie without permission to change plans', () => {
     renderChip(context([subject()]));
     openPopover();
