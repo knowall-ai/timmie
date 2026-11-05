@@ -1,3 +1,5 @@
+const path = require('path');
+
 // Thyme was renamed Timmie: the old hosts permanently redirect to the new ones, keeping the path
 const LEGACY_HOST_REDIRECTS = [
   { from: 'getthyme.ai', to: 'https://gettimm.ie' },
@@ -28,6 +30,10 @@ const securityHeaders = [
 const nextConfig = {
   reactStrictMode: true,
   output: 'standalone',
+  // The app lives in web/ but reads the help and legal pages from ../docs at runtime. Tracing
+  // from the repo root puts docs/ in the standalone build, with the server at web/server.js.
+  outputFileTracingRoot: path.join(__dirname, '..'),
+  turbopack: { root: path.join(__dirname, '..') },
   poweredByHeader: false,
   env: {
     NEXT_PUBLIC_APP_VERSION: require('./package.json').version,

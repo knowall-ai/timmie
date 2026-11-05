@@ -34,7 +34,7 @@ Timmie is a modern time tracking web application designed for KnowAll.ai team me
 
 [source]
 ----
-src/
+web/src/
 ├── app/                    # Next.js App Router pages
 ├── components/
 │   ├── ui/                 # Reusable UI components (Button, Input, Modal)
@@ -66,9 +66,9 @@ Every company-scoped page carries the Business Central environment and company i
 ----
 
 * `{environment}` is the environment Timmie stores on the company (`production` or `sandbox`, matched case-insensitively) and `{companyId}` is the BC company GUID. Company identity is id + environment, because a sandbox copy can share GUIDs with Production.
-* Company pages (Time, Projects, Team, Plan, Approvals, Reports, Settings) live under `src/app/[environment]/[companyId]/`. Its layout 404s anything that isn't a known environment plus a GUID, then `CompanyRouteGate` makes the URL's company the active one before rendering the page. If the user doesn't have that company, it shows "You don't have access to that company in Business Central" instead of another company's data.
+* Company pages (Time, Projects, Team, Plan, Approvals, Reports, Settings) live under `web/src/app/[environment]/[companyId]/`. Its layout 404s anything that isn't a known environment plus a GUID, then `CompanyRouteGate` makes the URL's company the active one before rendering the page. If the user doesn't have that company, it shows "You don't have access to that company in Business Central" instead of another company's data.
 * Public pages (`/`, `/pricing`, `/help`, `/privacy`, `/terms`, `/eula`) stay at the top level.
-* The old unprefixed URLs (`/time`, `/projects/PR00100`, ...) live in `src/app/(legacy)/` and redirect to the same page under the remembered company, keeping the query string and hash.
+* The old unprefixed URLs (`/time`, `/projects/PR00100`, ...) live in `web/src/app/(legacy)/` and redirect to the same page under the remembered company, keeping the query string and hash.
 * Build internal links with `useCompanyPath()` (e.g. `toHref('/projects')`) rather than hard-coding paths. Switching company in the picker opens the same page under the new company; detail pages such as `/projects/PR00100` fall back to their list page.
 * Signed-out visitors to a company URL see the landing page in place. MSAL's `navigateToLoginRequestUrl` returns them to the URL they opened once they've signed in.
 
@@ -142,7 +142,7 @@ so every company maps its own projects.
 * The project page's *Linked sources* card lists them, with link-outs for repos and DevOps
   projects. Administrators and the project's manager (`canEditSourceLinks` on `projects`) add,
   edit and remove them inline; values are checked and normalised as BC will store them
-  (`src/utils/projectSourceLinks.ts`), and BC re-checks.
+  (`web/src/utils/projectSourceLinks.ts`), and BC re-checks.
 * Adding a "Choose project" suggestion offers *Always map this to the chosen project and task*,
   which creates the link (repo, DevOps repo or project, meeting subject or attendee domain).
 * Links Poppie learns from approved time appear as *Learned*.
@@ -179,11 +179,11 @@ opens a popover listing the day's notes.
 in BC to people who can write planning lines, Timmie administrators and the AI agent. BC exposes
 the same check as a read-only `canEditPlan` on the `projects` and `resources` APIs; Timmie shows
 the edit controls when any loaded project or resource has `canEditPlan` true (`canEditPlan()` in
-`src/utils/dayNotes.ts`). A missing flag (older extension) counts as no. BC re-checks every change.
+`web/src/utils/dayNotes.ts`). A missing flag (older extension) counts as no. BC re-checks every change.
 An edit sends the ETag the note had when editing began; if someone changed it meanwhile (or BC
 returns 412/409), the save is refused and the user is asked to reload.
 
-*Capacity.* A *No project work* day has no capacity (`src/utils/capacity.ts`):
+*Capacity.* A *No project work* day has no capacity (`web/src/utils/capacity.ts`):
 
 * Any hours planned that day are over capacity (a red outline, never amber), with a tooltip such as
   "Company Off-Site: no project work, but 6h planned".

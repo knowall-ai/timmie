@@ -2,7 +2,7 @@
 
 ## Before you open a pull request
 
-Run all checks:
+Run all checks from `web/`:
 
 ```bash
 bun run check

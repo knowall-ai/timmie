@@ -5,13 +5,13 @@ import { PublicPageLayout } from '@/components/docs/PublicPageLayout';
 import { LegalDocLayout } from '@/components/docs/LegalDocLayout';
 
 export const metadata: Metadata = {
-  title: 'Terms of Service - Timmie by KnowAll.ai',
+  title: 'Privacy Policy - Timmie by KnowAll.ai',
   description:
-    'Read the Terms of Service for Timmie, the time tracking application for Microsoft Dynamics 365 Business Central.',
+    'Learn how Timmie collects, uses, and protects your personal information. Our privacy policy explains our data practices for our time tracking application.',
 };
 
-export default async function TermsPage() {
-  const filePath = path.join(process.cwd(), 'docs', 'TERMS.adoc');
+export default async function PrivacyPage() {
+  const filePath = path.join(process.cwd(), '..', 'docs', 'PRIVACY.adoc');
   const content = await fs.readFile(filePath, 'utf-8');
 
   return (

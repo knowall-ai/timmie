@@ -58,8 +58,8 @@ This document defines AI assistant personas that can help with the Timmie projec
 
 **Test Conventions**:
 
-- E2E tests go in `/tests/e2e/`
-- Unit tests go in `/tests/unit/`
+- E2E tests go in `/web/tests/e2e/`
+- Unit tests go in `/web/tests/unit/`
 - Use descriptive test names
 - Follow AAA pattern (Arrange, Act, Assert)
 - Mock Business Central API for isolation

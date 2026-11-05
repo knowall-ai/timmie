@@ -23,7 +23,7 @@ jobs:
       - name: Open a renewal issue if Expires is under 60 days away
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          FILE: public/.well-known/security.txt
+          FILE: web/public/.well-known/security.txt
           TITLE: Renew security.txt Expires date
           WARN_DAYS: 60
         run: |
@@ -53,7 +53,7 @@ jobs:
 
           renew_by=$(date -u -d '+6 months' +%Y-%m-%dT00:00:00Z)
           gh issue create --title "$TITLE" --body "$(cat <<EOF
-          \`$FILE\` expires on **$expires** ($days_left days from now). After that, security researchers and scanners treat it as stale (RFC 9116 §2.5.5), and the unit test in \`tests/unit/security/securityTxt.test.ts\` fails, which blocks PRs and releases.
+          \`$FILE\` expires on **$expires** ($days_left days from now). After that, security researchers and scanners treat it as stale (RFC 9116 §2.5.5), and the unit test in \`web/tests/unit/security/securityTxt.test.ts\` fails, which blocks PRs and releases.
 
           To renew:
 

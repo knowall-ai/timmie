@@ -169,7 +169,7 @@ Timmie shows this as:
 
 === Billable Hours
 
-Reports (Billable Hours, Billable %, per-project and per-day splits, CSV export), the Team page's Billable %, the Approvals billable % and new time entries all use one rule (`isBillableEntry` in `src/utils/billable.ts`). Time is billable only when *both*:
+Reports (Billable Hours, Billable %, per-project and per-day splits, CSV export), the Team page's Billable %, the Approvals billable % and new time entries all use one rule (`isBillableEntry` in `web/src/utils/billable.ts`). Time is billable only when *both*:
 
 * the timesheet line isn't marked not chargeable (`chargeable` on `/timeSheetLines` is not `false`), and
 * its project isn't *internal*.

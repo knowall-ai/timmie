@@ -16,10 +16,14 @@ permissions:
 jobs:
   deploy-production:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
 
     steps:
       - name: Get release info
         id: release
+        working-directory: .
         run: |
           echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           echo "sha=${GITHUB_SHA}" >> $GITHUB_OUTPUT
@@ -60,8 +64,9 @@ jobs:
 
       - name: Prepare standalone deployment
         run: |
-          cp -r public .next/standalone/
-          cp -r .next/static .next/standalone/.next/
+          # Traced from the repo root, so the server is at web/server.js with docs/ beside web/
+          cp -r public .next/standalone/web/
+          cp -r .next/static .next/standalone/web/.next/
           echo "Standalone deployment package prepared"
 
       - name: Create GitHub deployment
@@ -110,8 +115,8 @@ jobs:
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
-          package: .next/standalone
-          startup-command: 'node server.js'
+          package: web/.next/standalone
+          startup-command: 'node web/server.js'
 
       - name: Update deployment status
         if: always()

@@ -177,29 +177,32 @@ The deploy uses these repository secrets:
 
 == Release Workflow
 
-The application version is displayed in the footer and pulled from `package.json` at build time via `NEXT_PUBLIC_APP_VERSION`.
+The application version is displayed in the footer and pulled from `web/package.json` at build time via `NEXT_PUBLIC_APP_VERSION`.
 
 === Creating a Release
 
-Use npm's built-in version command to bump the version and create a git tag:
+From `web/`, bump the version and create the release commit and git tag:
 
 [source,bash]
 ----
 # Patch release (1.2.0 → 1.2.1) - bug fixes
-npm version patch
+bun run release patch
 
 # Minor release (1.2.0 → 1.3.0) - new features
-npm version minor
+bun run release minor
 
 # Major release (1.2.0 → 2.0.0) - breaking changes
-npm version major
+bun run release major
 ----
 
-This command:
+This command (`web/scripts/release.sh`):
 
-1. Updates the `version` field in `package.json`
-2. Creates a git commit with message `v1.2.1` (or whatever version)
+1. Updates the `version` field in `web/package.json`
+2. Creates a git commit with message `chore: release v1.2.1` (or whatever version)
 3. Creates a git tag `v1.2.1`
+
+Plain `npm version` only bumps the number here: it commits and tags only when `package.json` is at the
+repo root, and the web app is in `web/`.
 
 === Deploying a Release
 
@@ -224,7 +227,7 @@ The release flow becomes:
 
 [source,bash]
 ----
-# 1. Branch and bump the version in package.json only.
+# 1. Branch and bump the version in web/package.json only (run from web/).
 #    --no-git-tag-version skips the commit + tag — we don't tag yet because
 #    the PR is likely to be squash- or rebase-merged, which rewrites the SHA
 #    and would leave any pre-created tag pointing at a commit that never

@@ -7,7 +7,7 @@ node_modules/
 coverage/
 test-results/
 playwright-report/
-playwright/.cache/
+web/playwright/.cache/
 
 # Next.js
 .next/

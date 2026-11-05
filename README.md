@@ -2,7 +2,7 @@
 
 [![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/knowall-ai/timmie?label=CodeRabbit+Reviews&labelColor=171717&color=FF570A)](https://coderabbit.ai)
 
-![Timmie - Time Tracking for Business Central](public/social-preview.svg)
+![Timmie - Time Tracking for Business Central](web/public/social-preview.svg)
 
 A modern time tracking web application that integrates with Microsoft Dynamics 365 Business Central. Built by [KnowAll.ai](https://knowall.ai).
 
@@ -52,16 +52,16 @@ Poppie works alongside you. She proposes; you decide.
 
 ## Screenshots
 
-|                                                                                                                 |                                                                                                   |
-| :-------------------------------------------------------------------------------------------------------------: | :-----------------------------------------------------------------------------------------------: |
-|               [![Timesheet](public/screenshots/timesheet.png)](public/screenshots/timesheet.png)                |          [![Projects](public/screenshots/projects.png)](public/screenshots/projects.png)          |
-|                            **Timesheet** - Weekly time entry with billable % per day                            |                  **Projects** - Estimate, spend, plan and forecast for a project                  |
-|                       [![Team](public/screenshots/team.png)](public/screenshots/team.png)                       |                [![Plan](public/screenshots/plan.png)](public/screenshots/plan.png)                |
-|                         **Team** - Hours by stage, timesheet completion and billable %                          |                 **Plan** - Allocations by person, project and task, with capacity                 |
-|               [![Approvals](public/screenshots/approvals.png)](public/screenshots/approvals.png)                |           [![Reports](public/screenshots/reports.png)](public/screenshots/reports.png)            |
-|                         **Approvals** - Each entry on its own row, with Poppie's notes                          |                  **Reports** - Periods, filters, hours by project and CSV export                  |
-| [![Poppie's suggestions](public/screenshots/poppie-suggestions.png)](public/screenshots/poppie-suggestions.png) | [![Poppie's plan review](public/screenshots/plan-review.png)](public/screenshots/plan-review.png) |
-|            **Poppie's suggestions** - Time entries suggested from calendars, GitHub and Azure DevOps            |           **Plan review** - Poppie's verdict for each week, with changes you can apply            |
+|                                                                                                                         |                                                                                                           |
+| :---------------------------------------------------------------------------------------------------------------------: | :-------------------------------------------------------------------------------------------------------: |
+|               [![Timesheet](web/public/screenshots/timesheet.png)](web/public/screenshots/timesheet.png)                |          [![Projects](web/public/screenshots/projects.png)](web/public/screenshots/projects.png)          |
+|                                **Timesheet** - Weekly time entry with billable % per day                                |                      **Projects** - Estimate, spend, plan and forecast for a project                      |
+|                       [![Team](web/public/screenshots/team.png)](web/public/screenshots/team.png)                       |                [![Plan](web/public/screenshots/plan.png)](web/public/screenshots/plan.png)                |
+|                             **Team** - Hours by stage, timesheet completion and billable %                              |                     **Plan** - Allocations by person, project and task, with capacity                     |
+|               [![Approvals](web/public/screenshots/approvals.png)](web/public/screenshots/approvals.png)                |           [![Reports](web/public/screenshots/reports.png)](web/public/screenshots/reports.png)            |
+|                             **Approvals** - Each entry on its own row, with Poppie's notes                              |                      **Reports** - Periods, filters, hours by project and CSV export                      |
+| [![Poppie's suggestions](web/public/screenshots/poppie-suggestions.png)](web/public/screenshots/poppie-suggestions.png) | [![Poppie's plan review](web/public/screenshots/plan-review.png)](web/public/screenshots/plan-review.png) |
+|                **Poppie's suggestions** - Time entries suggested from calendars, GitHub and Azure DevOps                |               **Plan review** - Poppie's verdict for each week, with changes you can apply                |
 
 ## Tech Stack
 
@@ -89,7 +89,7 @@ Poppie works alongside you. She proposes; you decide.
 ```bash
 # Clone the repository
 git clone https://github.com/knowall-ai/timmie.git
-cd timmie
+cd timmie/web
 
 # Install dependencies
 bun install
@@ -117,6 +117,8 @@ BC_COMPANY_ID=<business-central-company-guid>
 ## Development
 
 ### Scripts
+
+Run these from `web/`.
 
 ```bash
 bun run dev          # Start development server
@@ -156,23 +158,24 @@ timmie/
 ├── .github/
 │   └── AGENTS.md              # AI assistant personas
 ├── docs/                      # Guides, FAQs and legal (AsciiDoc)
-├── scripts/
-│   └── capture-screenshots.mjs  # Landing page screenshots
-├── src/
-│   ├── app/
-│   │   ├── [environment]/
-│   │   │   └── [companyId]/   # Company pages: time, projects, team, plan, approvals, reports, settings
-│   │   ├── (legacy)/          # Redirects old /time, /projects… links to the company URL
-│   │   └── …                  # Landing, pricing, help and legal pages
-│   ├── components/            # React components
-│   ├── hooks/                 # Custom hooks & stores
-│   ├── services/              # API clients
-│   ├── types/                 # TypeScript types
-│   └── utils/                 # Utilities
-├── tests/
-│   ├── e2e/                   # Playwright tests
-│   └── unit/                  # Vitest tests
-└── public/                    # Static assets
+└── web/                       # Web application
+    ├── scripts/
+    │   └── capture-screenshots.mjs  # Landing page screenshots
+    ├── src/
+    │   ├── app/
+    │   │   ├── [environment]/
+    │   │   │   └── [companyId]/   # Company pages: time, projects, team, plan, approvals, reports, settings
+    │   │   ├── (legacy)/          # Redirects old /time, /projects… links to the company URL
+    │   │   └── …                  # Landing, pricing, help and legal pages
+    │   ├── components/            # React components
+    │   ├── hooks/                 # Custom hooks & stores
+    │   ├── services/              # API clients
+    │   ├── types/                 # TypeScript types
+    │   └── utils/                 # Utilities
+    ├── tests/
+    │   ├── e2e/                   # Playwright tests
+    │   └── unit/                  # Vitest tests
+    └── public/                    # Static assets
 ```
 
 ## Deployment
