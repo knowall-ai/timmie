@@ -450,8 +450,9 @@ export const projectDetailsService = {
     try {
       resources = await resourcesPromise;
     } catch {
-      // If resources can't be fetched, return empty analytics
-      return emptyAnalytics();
+      // If resources can't be fetched, return empty analytics, with the costs marked
+      // incomplete: the posted entries haven't been read, so zero isn't a real figure
+      return { ...emptyAnalytics(), costsIncomplete: true };
     }
 
     // Collect all time entries for this project

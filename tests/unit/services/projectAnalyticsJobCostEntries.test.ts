@@ -286,6 +286,16 @@ describe('project analytics from jobCostEntries', () => {
     error.mockRestore();
   });
 
+  it("marks the costs incomplete when the resources can't be read, rather than a zero margin", async () => {
+    client.getResources.mockRejectedValue(new Error('BC API Error (500): Internal error'));
+    client.getJobCostEntries.mockResolvedValue([entry({ resourceType: 'Person' })]);
+
+    const a = await projectDetailsService.getProjectAnalytics('PR00010');
+
+    expect(a.costsIncomplete).toBe(true);
+    expect(a.actualCost).toBe(0);
+  });
+
   it('marks the costs incomplete when the timeEntries fallback fails too', async () => {
     client.getJobCostEntries.mockResolvedValue(null);
     client.getTimeEntries.mockRejectedValue(new Error('BC API Error (500): Internal error'));

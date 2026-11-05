@@ -450,7 +450,9 @@ export function ProjectCharts() {
             hoursPlanned={analytics?.hoursPlanned ?? 0}
             estimateHours={analytics?.estimateHours ?? 0}
             billableResourcePrice={analytics?.billablePriceBreakdown?.resource ?? 0}
-            invoicedPrice={analytics?.invoicedPrice ?? 0}
+            // Resource entries only: the price of the posted hours, so the rate is per hour
+            // (AI, Item and G/L Account prices aren't hourly)
+            invoicedResourcePrice={analytics?.invoicedPriceBreakdown?.resource ?? 0}
             unpostedBillable={analytics?.unpostedBillable ?? 0}
             showBillablePrice={showBillablePrice}
             showTimeBudgeted={showTimeBudgeted}
@@ -969,7 +971,7 @@ function ProgressLineChart({
   hoursPlanned,
   estimateHours,
   billableResourcePrice,
-  invoicedPrice,
+  invoicedResourcePrice,
   unpostedBillable,
   showBillablePrice,
   showTimeBudgeted,
@@ -988,7 +990,7 @@ function ProgressLineChart({
   hoursPlanned: number;
   estimateHours: number;
   billableResourcePrice: number;
-  invoicedPrice: number;
+  invoicedResourcePrice: number; // Posted Resource entries' price: hours, not AI, Item or G/L
   unpostedBillable: number;
   showBillablePrice: boolean;
   showTimeBudgeted: boolean;
@@ -1027,14 +1029,14 @@ function ProgressLineChart({
   // Falls back to the Plan's hours for projects without an estimate (e.g. internal work).
   const budgetHours = estimateHours > 0 ? estimateHours : hoursPlanned;
   // Selling rate per hour, so £ compares like with like against the Billable Price:
-  // posted invoiced price + the service's estimate for unposted hours, over hours spent;
-  // before any time is spent, the estimate's own rate.
+  // the posted hours' price (Resource entries only) + the service's estimate for unposted
+  // hours, over hours spent; before any time is spent, the estimate's own rate.
   const priceRate = useMemo(() => {
-    const spentPrice = invoicedPrice + unpostedBillable;
+    const spentPrice = invoicedResourcePrice + unpostedBillable;
     if (spentPrice > 0 && hoursSpent > 0) return spentPrice / hoursSpent;
     if (billableResourcePrice > 0 && budgetHours > 0) return billableResourcePrice / budgetHours;
     return null;
-  }, [invoicedPrice, unpostedBillable, hoursSpent, billableResourcePrice, budgetHours]);
+  }, [invoicedResourcePrice, unpostedBillable, hoursSpent, billableResourcePrice, budgetHours]);
   // Value per hour in the chosen unit; the rest of the chart works in that unit
   const effortRate = unit === 'hours' ? 1 : 1 / (hoursPerDay || 8);
   const avgCostRate = isCost ? priceRate : effortRate;
