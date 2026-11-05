@@ -328,9 +328,7 @@ export function PublicTimmieLauncher({ persona = TIMMIE_PERSONA }: { persona?: P
               <p className="text-dark-400 mt-1 text-xs">{status.chatReason}</p>
             )}
             {works ? (
-              <p className="text-dark-500 mt-1 text-xs">
-                Or tap me. I can&rsquo;t see anyone&rsquo;s timesheets.
-              </p>
+              <p className="text-dark-500 mt-1 text-xs">Or tap me to talk.</p>
             ) : (
               <p className="text-dark-400 mt-1 text-xs">
                 See{' '}
