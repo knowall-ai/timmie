@@ -19,13 +19,15 @@ That includes customer names, project names and descriptions, job/task names tha
 
 ## Key Directories
 
-- `src/app/` - Next.js App Router pages
-- `src/components/` - React components
-- `src/services/auth/` - MSAL authentication
-- `src/services/bc/` - Business Central API client
+- `web/src/app/` - Next.js App Router pages
+- `web/src/components/` - React components
+- `web/src/services/auth/` - MSAL authentication
+- `web/src/services/bc/` - Business Central API client
 - `docs/` - Documentation (AsciiDoc format)
 
 ## Development Commands
+
+Run these from `web/`.
 
 ```bash
 bun run dev          # Start dev server
@@ -68,19 +70,19 @@ CI/CD runs these checks automatically on every PR via GitHub Actions.
 
 ## Release Workflow
 
-The app version is displayed in the footer (from `package.json` via `NEXT_PUBLIC_APP_VERSION`).
+The app version is displayed in the footer (from `web/package.json` via `NEXT_PUBLIC_APP_VERSION`).
 
-To create a release:
+To create a release, from `web/`:
 
 ```bash
-npm version patch   # Bug fix: 1.2.0 → 1.2.1
-npm version minor   # New feature: 1.2.0 → 1.3.0
-npm version major   # Breaking change: 1.2.0 → 2.0.0
+bun run release patch   # Bug fix: 1.2.0 → 1.2.1
+bun run release minor   # New feature: 1.2.0 → 1.3.0
+bun run release major   # Breaking change: 1.2.0 → 2.0.0
 
 git push && git push --tags  # Deploy to production
 ```
 
-The `npm version` command updates `package.json`, creates a commit, and creates a git tag. Pushing the tag triggers the production deployment workflow.
+`bun run release` updates `web/package.json`, creates the release commit and creates the `v*` git tag. Pushing the tag triggers the production deployment workflow. Plain `npm version` doesn't commit or tag here, because `package.json` isn't at the repo root.
 
 ## Troubleshooting Documentation
 
@@ -116,15 +118,15 @@ Keep entries concise but complete enough for someone unfamiliar with the codebas
 - API endpoint: `/projects` for projects (not `/jobs`)
 - Employees endpoint: `/employees`
 - Company info: `/companyInformation`
-- All API calls go through `src/services/bc/bcClient.ts`
+- All API calls go through `web/src/services/bc/bcClient.ts`
 
 ## Authentication
 
 Uses MSAL with redirect flow (not popup). Key files:
 
-- `src/services/auth/AuthProvider.tsx` - MSAL setup and hooks
-- `src/services/auth/msalConfig.ts` - Configuration
-- `src/services/auth/tokenService.ts` - Token acquisition
+- `web/src/services/auth/AuthProvider.tsx` - MSAL setup and hooks
+- `web/src/services/auth/msalConfig.ts` - Configuration
+- `web/src/services/auth/tokenService.ts` - Token acquisition
 
 ### Azure AD Redirect URIs
 
@@ -133,7 +135,7 @@ The redirect URI is determined dynamically using `window.location.origin`, so it
 **Registered SPA Redirect URIs:**
 
 - `http://localhost:3000` - Default Next.js port
-- `http://localhost:3101` - Local dev port (configured in package.json)
+- `http://localhost:3101` - Local dev port (configured in web/package.json)
 - `https://gettimm.ie` - Production
 - `https://timmie.knowall.ai` - Production (KnowAll's own address)
 
@@ -155,4 +157,4 @@ This project is configured for shadcn/ui. To add a new component:
 bunx shadcn@latest add [component-name]
 ```
 
-Components will be added to `src/components/ui/`.
+Components will be added to `web/src/components/ui/`.

@@ -14,6 +14,9 @@ jobs:
   check:
     name: Lint, Format & Type Check
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
 
     steps:
       - name: Checkout
@@ -37,6 +40,9 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
     needs: check
 
     steps:
@@ -55,6 +61,9 @@ jobs:
   test:
     name: Unit Tests
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
     needs: check
 
     steps:

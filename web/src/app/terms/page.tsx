@@ -5,13 +5,13 @@ import { PublicPageLayout } from '@/components/docs/PublicPageLayout';
 import { LegalDocLayout } from '@/components/docs/LegalDocLayout';
 
 export const metadata: Metadata = {
-  title: 'End User License Agreement - Timmie by KnowAll.ai',
+  title: 'Terms of Service - Timmie by KnowAll.ai',
   description:
-    'End User License Agreement (EULA) for Timmie, the time tracking application for Microsoft Dynamics 365 Business Central.',
+    'Read the Terms of Service for Timmie, the time tracking application for Microsoft Dynamics 365 Business Central.',
 };
 
-export default async function EulaPage() {
-  const filePath = path.join(process.cwd(), 'docs', 'EULA.adoc');
+export default async function TermsPage() {
+  const filePath = path.join(process.cwd(), '..', 'docs', 'TERMS.adoc');
   const content = await fs.readFile(filePath, 'utf-8');
 
   return (

@@ -3,7 +3,7 @@
 // Connects to a browser you've already signed in to (started with
 // --remote-debugging-port=9222), opens each page under /{environment}/{companyId}/…
 // and saves 1280x720 PNGs to public/screenshots/. See
-// .claude/skills/capture-app-screenshots.md for the full guide.
+// ../.claude/skills/capture-app-screenshots.md for the full guide.
 //
 // Usage:
 //   node scripts/capture-screenshots.mjs --env sandbox --company <company-guid> \

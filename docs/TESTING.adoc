@@ -10,6 +10,8 @@ Timmie uses a comprehensive testing strategy with:
 
 == Running Tests
 
+Run commands from `web/`.
+
 === Unit Tests (Vitest)
 
 [source,bash]
@@ -48,7 +50,7 @@ npx playwright test tests/e2e/auth.spec.ts
 
 [source]
 ----
-tests/
+web/tests/
 ├── e2e/                      # Playwright E2E tests
 │   ├── auth.spec.ts          # Authentication flows
 │   ├── timesheet.spec.ts     # Weekly timesheet
@@ -68,15 +70,15 @@ tests/
 
 Unit tests (Vitest):
 
-* `tests/unit/utils/dayNotes.test.ts` - grouping notes by date and person, "no project work"
+* `web/tests/unit/utils/dayNotes.test.ts` - grouping notes by date and person, "no project work"
   reasons, tooltips, input validation, conflict detection and the `canEditPlan` rule
-* `tests/unit/utils/capacity.test.ts` (_days with no project work_) - hours on such a day are
+* `web/tests/unit/utils/capacity.test.ts` (_days with no project work_) - hours on such a day are
   over capacity and never under, and the reduced weekly capacity
-* `tests/unit/services/bcClient.dayNotes.test.ts` - the `dayNotes` date filter, 404 handling,
+* `web/tests/unit/services/bcClient.dayNotes.test.ts` - the `dayNotes` date filter, 404 handling,
   request bodies, ETags on PATCH/DELETE, and `canEditPlan` on projects and resources
-* `tests/unit/hooks/useDayNotesStore.test.ts` - out-of-date reads, edits applied at once, failed
+* `web/tests/unit/hooks/useDayNotesStore.test.ts` - out-of-date reads, edits applied at once, failed
   re-reads, caching and company switches
-* `tests/unit/plan/DayNotes.test.tsx` and `tests/unit/plan/PlanPanel.dayNotes.test.tsx` - the
+* `web/tests/unit/plan/DayNotes.test.tsx` and `web/tests/unit/plan/PlanPanel.dayNotes.test.tsx` - the
   header marker, person markers, the popover (read-only vs. edit controls, keyboard, conflicts)
   and the Plan's capacity outlines
 
@@ -220,6 +222,9 @@ Tests run automatically in GitHub Actions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

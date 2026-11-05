@@ -11,8 +11,8 @@ export const metadata: Metadata = {
 };
 
 export default async function HelpPage() {
-  const faqsPath = path.join(process.cwd(), 'docs', 'FAQs.adoc');
-  const troubleshootingPath = path.join(process.cwd(), 'docs', 'TROUBLESHOOTING.adoc');
+  const faqsPath = path.join(process.cwd(), '..', 'docs', 'FAQs.adoc');
+  const troubleshootingPath = path.join(process.cwd(), '..', 'docs', 'TROUBLESHOOTING.adoc');
 
   const [faqsContent, troubleshootingContent] = await Promise.all([
     fs.readFile(faqsPath, 'utf-8'),
