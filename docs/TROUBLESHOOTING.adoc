@@ -36,7 +36,7 @@ Solutions to common problems with Timmie. Click a problem to see how to fix it.
 | Problem | Solution
 
 | Yellow banner: "Business Central isn't accepting requests from browsers right now"
-| The banner may instead say Business Central "is rejecting some requests" or "isn't responding", and pages are empty. Business Central's API is failing, which Timmie confirms from its own server (`/api/health/bc`, which sends the same CORS preflight a browser does). It has been seen rejecting every browser's preflight (401 on `OPTIONS`, for every website), which blocks all browser calls to it. Nothing needs fixing in Timmie: the banner clears itself (it checks every minute) once Microsoft fixes it. Admins can check Health > Service health in the Microsoft 365 admin center. To check by hand: `curl -s -o /dev/null -w "%{http_code}" -X OPTIONS -H "Origin: https://gettimm.ie" -H "Access-Control-Request-Method: GET" -H "Access-Control-Request-Headers: authorization" https://api.businesscentral.dynamics.com/v2.0/production/api/v2.0/companies` (200 is healthy).
+| The banner may instead say Business Central "is rejecting some requests" or "isn't responding", and pages are empty. Business Central's API is failing, which Timmie confirms from its own server (`/api/health/bc`, which sends the same CORS preflight a browser does). It has been seen rejecting every browser's preflight (401 on `OPTIONS`, for every website), which blocks all browser calls to it. Nothing needs fixing in Timmie: the banner clears itself (it checks every minute) once Microsoft fixes it. Admins can check Health > Service health in the Microsoft 365 admin center. To check by hand, send the same preflight and look at the response headers: `curl -s -i -X OPTIONS -H "Origin: https://gettimm.ie" -H "Access-Control-Request-Method: GET" -H "Access-Control-Request-Headers: authorization,content-type" https://api.businesscentral.dynamics.com/v2.0/production/api/v2.0/companies`. Healthy means a 200 whose `Access-Control-Allow-Origin` is `https://gettimm.ie` (or `*`) and whose `Access-Control-Allow-Headers` includes both `authorization` and `content-type`; a 200 without those headers still blocks the browser. Use your own Timmie address as the Origin if you self-host.
 
 | "Timmie BC Extension is not installed" error
 | The Timesheet API requires the Timmie BC Extension to be installed. Install from https://github.com/knowall-ai/timmie-bc-extension
@@ -256,7 +256,7 @@ For people running their own Timmie or working on its code.
 | Problem | Solution
 
 | Auth redirect fails with "AADSTS50011" error
-| Verify redirect URI in Azure App Registration matches `NEXT_PUBLIC_AZURE_REDIRECT_URI` exactly (including trailing slash if present)
+| The browser uses its own origin (for example `http://localhost:3101` or `https://gettimm.ie`) as the redirect URI, so register that origin, without a trailing slash, as a single-page application redirect URI in the Azure App Registration. `NEXT_PUBLIC_AZURE_REDIRECT_URI` is only used during server-side rendering and doesn't change what the browser sends.
 
 | Production auth fails with "AADSTS900144: client_id missing"
 | `NEXT_PUBLIC_*` env vars are baked in at build time in Next.js, not runtime. Add them as GitHub secrets and include in the build step of `deploy-production.yml` workflow. Azure App Service settings alone won't work for client-side variables.

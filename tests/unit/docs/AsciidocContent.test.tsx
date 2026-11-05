@@ -124,6 +124,40 @@ describe('tablesToDisclosures', () => {
     expect(answer?.querySelector('strong')?.textContent).toBe('bun install');
   });
 
+  it('leaves a table alone unless every row has exactly two cells', () => {
+    const threeColumns = tablesToDisclosures(
+      toHtml(`|===
+| Name | Type | Default
+
+| port
+| number
+| 3101
+|===`)
+    );
+    expect(parse(threeColumns).querySelectorAll('details').length).toBe(0);
+    expect(parse(threeColumns).querySelectorAll('table tbody td').length).toBe(3);
+
+    const oneColumn = tablesToDisclosures(toHtml('|===\n| Only cell\n|==='));
+    expect(parse(oneColumn).querySelectorAll('details').length).toBe(0);
+    expect(parse(oneColumn).querySelector('table')).not.toBeNull();
+
+    // A two-column table in the same document is still converted
+    const mixed = tablesToDisclosures(
+      toHtml(`|===
+| a | b | c
+|===
+
+|===
+| Problem | Solution
+
+| Question
+| Answer
+|===`)
+    );
+    expect(parse(mixed).querySelectorAll('table').length).toBe(1);
+    expect(parse(mixed).querySelectorAll('details').length).toBe(1);
+  });
+
   it('leaves text and lists outside the tables alone', () => {
     const html = tablesToDisclosures(toHtml('Intro paragraph.\n\n* one\n* two'));
     const doc = parse(html);

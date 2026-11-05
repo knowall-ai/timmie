@@ -39,14 +39,18 @@ export function tablesToDisclosures(html: string): string {
   const usedIds = new Set<string>();
 
   doc.querySelectorAll('table').forEach((table) => {
+    // Only a question-and-answer table: every row has exactly two cells. Any other
+    // shape is left as a table rather than losing or inventing cells.
+    const rows = Array.from(table.querySelectorAll('tbody tr')).map((row) =>
+      Array.from(row.querySelectorAll('td'))
+    );
+    if (rows.length === 0 || rows.some((cells) => cells.length !== 2)) return;
+
     const list = doc.createElement('div');
     list.className =
       'border-dark-700 divide-dark-700 not-prose my-6 divide-y overflow-hidden rounded-xl border';
 
-    table.querySelectorAll('tbody tr').forEach((row) => {
-      const [question, answer] = Array.from(row.querySelectorAll('td'));
-      if (!question || !answer) return;
-
+    rows.forEach(([question, answer]) => {
       const title = question.textContent?.trim() ?? '';
       let id = slugify(title);
       for (let n = 2; usedIds.has(id); n++) id = `${slugify(title)}-${n}`;
