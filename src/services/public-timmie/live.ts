@@ -220,17 +220,21 @@ export interface SupervisorDeps {
 
 /**
  * A hangup the service hasn't confirmed is retried every 15 s for five minutes, then every
- * minute for as long as it takes: the call's slot is never given back on a guess. The
- * service ends the session itself eventually, and the next hangup then gets 404.
+ * minute, holding the call's slot the while so an unsupervised session can't make room for
+ * another. The service ends a session itself well within an hour (the next hangup then gets
+ * 404), so after an hour the slot is no longer protecting anything and is given back, with
+ * a warning in the log.
  */
 const HANGUP_RETRY_MS = 15_000;
 const HANGUP_RETRY_SLOW_MS = 60_000;
 const HANGUP_FAST_RETRIES = 20;
+const HANGUP_GIVE_UP_MS = 60 * 60_000;
 
 export interface SupervisedCall {
   /**
    * Resolves with the reason once the call is over: after a hangup the service has
-   * confirmed (bar 'ended', when the service closed the session itself). Never on a guess.
+   * confirmed (bar 'ended', when the service closed the session itself), or, with
+   * '+hangup-unconfirmed' added, after an hour of the service refusing to confirm it.
    */
   done: Promise<string>;
   /** End the call (the visitor hung up, or the server is closing it). */
@@ -299,13 +303,17 @@ export function superviseLiveCall(
     if (caption) options.onUpdate({ type: 'caption', text: caption, final: true });
     options.onUpdate({ type: 'ended', reason });
     if (reason === 'ended') return resolveDone(reason);
-    // `done` (which frees the call's slot) resolves only once the service has confirmed the
-    // hangup. An unconfirmed hangup is retried until it is, keeping the slot taken, so an
-    // unsupervised session can never make room for another.
+    // `done` (which frees the call's slot) resolves once the service has confirmed the
+    // hangup, or after an hour of trying, by which time the session has ended on its own.
     void (async () => {
+      const gaveUpAt = now() + HANGUP_GIVE_UP_MS;
       for (let attempt = 0; ; attempt++) {
         if (await hangUp()) return resolveDone(reason);
-        console.warn(JSON.stringify({ evt: 'public_timmie', kind: 'hangup', ok: false, attempt }));
+        const gaveUp = now() >= gaveUpAt;
+        console.warn(
+          JSON.stringify({ evt: 'public_timmie', kind: 'hangup', ok: false, attempt, gaveUp })
+        );
+        if (gaveUp) return resolveDone(`${reason}+hangup-unconfirmed`);
         await sleep(attempt < HANGUP_FAST_RETRIES ? HANGUP_RETRY_MS : HANGUP_RETRY_SLOW_MS);
       }
     })();

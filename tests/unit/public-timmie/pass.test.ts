@@ -15,6 +15,7 @@ import {
   verifyChain,
   verifyPass,
   verifyProofOfWork,
+  verifyTurnstile,
   type ChainTurn,
 } from '@/services/public-timmie/pass';
 
@@ -33,7 +34,27 @@ function solve(challenge: string, need: number): string {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   resetPassUsage();
+});
+
+describe('Turnstile', () => {
+  it('sends remoteip only for a real address, never the IPv6 /64 key or "unknown"', async () => {
+    const bodies: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init: { body: URLSearchParams }) => {
+        bodies.push(init.body.toString());
+        return { json: async () => ({ success: true }) };
+      })
+    );
+    expect(await verifyTurnstile('token', 'secret', '203.0.113.9')).toBe(true);
+    expect(await verifyTurnstile('token', 'secret', '2001:db8:1:2::/64')).toBe(true);
+    expect(await verifyTurnstile('token', 'secret', 'unknown')).toBe(true);
+    expect(bodies[0]).toContain('remoteip=203.0.113.9');
+    expect(bodies[1]).not.toContain('remoteip');
+    expect(bodies[2]).not.toContain('remoteip');
+  });
 });
 
 describe('proof of work', () => {

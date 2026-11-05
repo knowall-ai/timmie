@@ -220,21 +220,34 @@ describe('supervising a call', () => {
     expect(await call.done).toBe('visitor');
   });
 
-  it('never frees the slot while the service keeps refusing the hangup', async () => {
+  it('holds the slot while the service keeps refusing the hangup, for up to an hour', async () => {
     hangUp.mockResolvedValue(false);
     const call = await supervise();
     socket.emit(started);
-    let freed = false;
-    void call.done.then(() => (freed = true));
+    let freed: string | undefined;
+    void call.done.then((reason) => (freed = reason));
     call.end('visitor');
     // Five minutes of fast retries, then slow ones: still holding the slot.
     await vi.advanceTimersByTimeAsync(20 * 15_000 + 10 * 60_000);
     expect(hangUp.mock.calls.length).toBeGreaterThanOrEqual(30);
-    expect(freed).toBe(false);
+    expect(freed).toBeUndefined();
     // The session ends on its own (404 counts as confirmed): the slot is freed then.
     hangUp.mockResolvedValue(true);
     await vi.advanceTimersByTimeAsync(60_000);
-    expect(freed).toBe(true);
+    expect(freed).toBe('visitor');
+  });
+
+  it('gives the slot back after an hour of unconfirmed hangups, saying so', async () => {
+    hangUp.mockResolvedValue(false);
+    const call = await supervise();
+    socket.emit(started);
+    let freed: string | undefined;
+    void call.done.then((reason) => (freed = reason));
+    call.end('visitor');
+    await vi.advanceTimersByTimeAsync(59 * 60_000);
+    expect(freed).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(2 * 60_000);
+    expect(freed).toBe('visitor+hangup-unconfirmed');
   });
 
   const supervise = async (greet = false) => {

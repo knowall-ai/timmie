@@ -62,6 +62,7 @@ export function useGreeting({
   const audio = useRef<HTMLAudioElement | null>(null);
   const state = useRef<GreetingAudio>('idle');
   const finishedWaiters = useRef<(() => void)[]>([]);
+  const greetTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const setAudio = useCallback((next: GreetingAudio) => {
     state.current = next;
@@ -100,7 +101,7 @@ export function useGreeting({
     if (!enabled) return;
     const session = browserStore('session');
     if (!shouldGreet(session)) return;
-    const timer = setTimeout(() => {
+    greetTimer.current = setTimeout(() => {
       // Dismissed or muted (or greeted in another tab) while we waited.
       if (!shouldGreet(session)) return;
       markGreeted(session);
@@ -108,7 +109,7 @@ export function useGreeting({
       setAutoGreeted(true);
       if (!muted) play();
     }, GREETING_DELAY_MS);
-    return () => clearTimeout(timer);
+    return () => clearTimeout(greetTimer.current);
     // `muted` is read when the timer fires; changing it must not restart the greeting.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, play]);
@@ -144,11 +145,12 @@ export function useGreeting({
   }, [stopAudio]);
 
   /**
-   * Close the bubble because the visitor has started talking or chatting. That counts as
-   * greeted, so a greeting still waiting on its timer can't open the bubble (and start the
-   * clip) over the conversation; a clip already playing carries on.
+   * Close the bubble because the visitor has started talking or chatting. A greeting still
+   * waiting on its timer is cancelled (and the session marked greeted) so it can't open the
+   * bubble or start the clip over the conversation; a clip already playing carries on.
    */
   const hide = useCallback(() => {
+    clearTimeout(greetTimer.current);
     markGreeted(browserStore('session'));
     setOpen(false);
   }, []);
