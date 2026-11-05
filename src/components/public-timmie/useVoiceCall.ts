@@ -64,6 +64,8 @@ export function useVoiceCall(
             onError: setError,
           }
         );
+        // The speaker may have been toggled while the call was connecting.
+        call.current?.setSpeakerMuted(speakerMuted.current);
       } catch {
         // Reported through onError (unless the visitor ended it while connecting).
       }

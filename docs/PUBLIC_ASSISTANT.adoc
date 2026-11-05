@@ -354,9 +354,9 @@ Only counts and errors, one JSON line per event (`{"evt":"public_timmie","kind":
 
 === Kill switch
 
-`PUBLIC_TIMMIE_ENABLED=false` (an App Service setting, no redeploy): every `/api/public/*` route
-returns 503 and the launcher does not appear. Removing the deployments on the public resource also
-stops it.
+`PUBLIC_TIMMIE_ENABLED=false` (an App Service setting, no redeploy): `/api/public/status` reports
+`enabled: false`, so the launcher does not appear, and every other `/api/public/*` route returns
+503. Removing the deployments on the public resource also stops it.
 
 == Environment variables
 

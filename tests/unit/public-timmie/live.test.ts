@@ -220,6 +220,23 @@ describe('supervising a call', () => {
     expect(await call.done).toBe('visitor');
   });
 
+  it('never frees the slot while the service keeps refusing the hangup', async () => {
+    hangUp.mockResolvedValue(false);
+    const call = await supervise();
+    socket.emit(started);
+    let freed = false;
+    void call.done.then(() => (freed = true));
+    call.end('visitor');
+    // Five minutes of fast retries, then slow ones: still holding the slot.
+    await vi.advanceTimersByTimeAsync(20 * 15_000 + 10 * 60_000);
+    expect(hangUp.mock.calls.length).toBeGreaterThanOrEqual(30);
+    expect(freed).toBe(false);
+    // The session ends on its own (404 counts as confirmed): the slot is freed then.
+    hangUp.mockResolvedValue(true);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(freed).toBe(true);
+  });
+
   const supervise = async (greet = false) => {
     const call = superviseLiveCall(
       config,

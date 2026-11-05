@@ -188,7 +188,7 @@ See link:PUBLIC_ASSISTANT.adoc[PUBLIC_ASSISTANT.adoc] for the design, threat mod
 | `PUBLIC_TIMMIE_CHAT_DEPLOYMENT` | Text chat: its chat deployment (a small GPT-5-family or later reasoning model). Unset: chat is off
 | `PUBLIC_AZURE_OPENAI_API_KEY` | Optional fallback key for chat (a Key Vault reference)
 | `PUBLIC_TURNSTILE_SITE_KEY`, `PUBLIC_TURNSTILE_SECRET` | Optional. Cloudflare Turnstile instead of the built-in proof-of-work check (both needed)
-| `PUBLIC_TIMMIE_ENABLED` | Optional. `false` is the kill switch: no avatar, every `/api/public/*` route answers 503
+| `PUBLIC_TIMMIE_ENABLED` | Optional. `false` is the kill switch: `/api/public/status` reports `enabled: false` (so no avatar) and every other `/api/public/*` route answers 503
 | `PUBLIC_TIMMIE_ALLOWED_ORIGINS` | Optional. Extra site origins (comma-separated), e.g. a staging slot
 | `PUBLIC_TIMMIE_POW_BITS`, `PUBLIC_TIMMIE_VOICE_POW_BITS`, `PUBLIC_TIMMIE_CHAT_DAILY_CAP`, `PUBLIC_TIMMIE_VOICE_DAILY_CAP`, `PUBLIC_TIMMIE_VOICE_MAX_CONCURRENT` | Optional tuning: proof-of-work difficulty (16 for chat, 18 for voice) and the global caps (3,000 chats and 100 calls a day, 5 calls at once; always one call per IP)
 |===

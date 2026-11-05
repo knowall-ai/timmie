@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { frontDoorId } from '@/services/contact/requestGuards';
-import { publicClientIp } from '@/services/public-timmie/client-ip';
+import { clientKey, publicClientIp } from '@/services/public-timmie/client-ip';
 import {
   powBits,
   publicAzureConfig,
@@ -69,7 +69,7 @@ describe('client IP and the Front Door check', () => {
     ).toEqual({ ok: true, ip: '203.0.113.9' });
     expect(publicClientIp(h({ 'x-forwarded-for': '[2001:db8::1]:443' }), undefined)).toEqual({
       ok: true,
-      ip: '2001:db8::1',
+      ip: '2001:db8:0:0::/64',
     });
     expect(publicClientIp(h({}), undefined)).toEqual({ ok: true, ip: 'unknown' });
   });
@@ -80,6 +80,25 @@ describe('client IP and the Front Door check', () => {
     expect(frontDoorId()).toBe('shared-id');
     vi.stubEnv('FRONT_DOOR_ID', '');
     expect(frontDoorId()).toBeUndefined();
+  });
+
+  it('keys an IPv6 visitor on their /64, so a new address per request shares the limits', () => {
+    expect(clientKey('2001:db8:1:2:aaaa:bbbb:cccc:dddd')).toBe('2001:db8:1:2::/64');
+    expect(clientKey('2001:db8:1:2::1')).toBe('2001:db8:1:2::/64');
+    expect(clientKey('2001:0DB8:0001:0002::')).toBe('2001:db8:1:2::/64');
+    expect(clientKey('::1')).toBe('0:0:0:0::/64');
+    expect(clientKey('fe80::1%eth0')).toBe('fe80:0:0:0::/64');
+    expect(clientKey('::ffff:203.0.113.9')).toBe('203.0.113.9');
+    expect(clientKey('203.0.113.9')).toBe('203.0.113.9');
+    for (const junk of ['1::2::3', '2001:db8', '1:2:3:4:5:6:7:8:9', 'not:an:ip', '']) {
+      expect(clientKey(junk), junk).toBe(junk);
+    }
+    expect(
+      publicClientIp(
+        h({ 'x-azure-fdid': FDID, 'x-azure-socketip': '[2001:db8:1:2:aaaa::7]:51234' }),
+        FDID
+      )
+    ).toEqual({ ok: true, ip: '2001:db8:1:2::/64' });
   });
 
   it('matches the Front Door id case-insensitively, like the enquiry form', () => {

@@ -38,7 +38,10 @@ export const DEFAULT_VOICE = 'vesper';
 const env = (name: string) => process.env[name]?.trim() || undefined;
 const isProduction = () => process.env.NODE_ENV === 'production';
 
-/** Kill switch: PUBLIC_TIMMIE_ENABLED=false hides the launcher and makes every route 503. */
+/**
+ * Kill switch: PUBLIC_TIMMIE_ENABLED=false makes every /api/public route answer 503, except
+ * /api/public/status, which reports `enabled: false` so the launcher hides itself.
+ */
 export function publicTimmieEnabled(): boolean {
   return (process.env.PUBLIC_TIMMIE_ENABLED ?? 'true').trim().toLowerCase() !== 'false';
 }

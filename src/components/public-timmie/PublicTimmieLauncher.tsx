@@ -142,6 +142,7 @@ export function PublicTimmieLauncher({ persona = TIMMIE_PERSONA }: { persona?: P
           micDenied: `${persona.name} needs your microphone for a call. Allow it in your browser, or chat instead.`,
           noMic: `No microphone found. You can chat with ${persona.name} instead.`,
           failed: `${persona.name} could not pick up. Please try again, or chat instead.`,
+          dropped: `The call with ${persona.name} was cut off. Please try again, or chat instead.`,
         },
       }),
     [getPass, persona.name]
@@ -280,9 +281,10 @@ export function PublicTimmieLauncher({ persona = TIMMIE_PERSONA }: { persona?: P
               className="mt-2 min-h-[4.5rem] text-sm leading-relaxed text-white"
               data-testid="ask-timmie-greeting"
               data-greeting-id={greet.greeting.id}
-              aria-label={greet.greeting.text}
             >
+              {/* The typewriter is hidden from screen readers; they get the whole line at once. */}
               <span aria-hidden="true">{typed}</span>
+              <span className="sr-only">{greet.greeting.text}</span>
             </p>
             {greet.needsTap && (
               <button
@@ -328,7 +330,7 @@ export function PublicTimmieLauncher({ persona = TIMMIE_PERSONA }: { persona?: P
               <p className="text-dark-400 mt-1 text-xs">{status.chatReason}</p>
             )}
             {works ? (
-              <p className="text-dark-500 mt-1 text-xs">Or tap me to talk.</p>
+              canTalk && <p className="text-dark-500 mt-1 text-xs">Or tap me to talk.</p>
             ) : (
               <p className="text-dark-400 mt-1 text-xs">
                 See{' '}

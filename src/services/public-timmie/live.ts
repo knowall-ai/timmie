@@ -218,12 +218,20 @@ export interface SupervisorDeps {
   sleep: (ms: number) => Promise<void>;
 }
 
-/** How long to keep retrying a hangup that the service hasn't confirmed. */
+/**
+ * A hangup the service hasn't confirmed is retried every 15 s for five minutes, then every
+ * minute for as long as it takes: the call's slot is never given back on a guess. The
+ * service ends the session itself eventually, and the next hangup then gets 404.
+ */
 const HANGUP_RETRY_MS = 15_000;
-const HANGUP_RETRIES = 20;
+const HANGUP_RETRY_SLOW_MS = 60_000;
+const HANGUP_FAST_RETRIES = 20;
 
 export interface SupervisedCall {
-  /** Resolves with the reason once the call is over (always after a hangup, bar 'ended'). */
+  /**
+   * Resolves with the reason once the call is over: after a hangup the service has
+   * confirmed (bar 'ended', when the service closed the session itself). Never on a guess.
+   */
   done: Promise<string>;
   /** End the call (the visitor hung up, or the server is closing it). */
   end: (reason: string) => void;
@@ -292,15 +300,14 @@ export function superviseLiveCall(
     options.onUpdate({ type: 'ended', reason });
     if (reason === 'ended') return resolveDone(reason);
     // `done` (which frees the call's slot) resolves only once the service has confirmed the
-    // hangup. An unconfirmed hangup is retried for several minutes, keeping the slot taken,
-    // so an unsupervised session can never make room for another.
+    // hangup. An unconfirmed hangup is retried until it is, keeping the slot taken, so an
+    // unsupervised session can never make room for another.
     void (async () => {
-      for (let attempt = 0; attempt < HANGUP_RETRIES; attempt++) {
+      for (let attempt = 0; ; attempt++) {
         if (await hangUp()) return resolveDone(reason);
         console.warn(JSON.stringify({ evt: 'public_timmie', kind: 'hangup', ok: false, attempt }));
-        await sleep(HANGUP_RETRY_MS);
+        await sleep(attempt < HANGUP_FAST_RETRIES ? HANGUP_RETRY_MS : HANGUP_RETRY_SLOW_MS);
       }
-      resolveDone(`${reason}+hangup-unconfirmed`);
     })();
   };
 

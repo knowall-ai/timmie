@@ -143,7 +143,15 @@ export function useGreeting({
     setOpen(false);
   }, [stopAudio]);
 
-  const hide = useCallback(() => setOpen(false), []);
+  /**
+   * Close the bubble because the visitor has started talking or chatting. That counts as
+   * greeted, so a greeting still waiting on its timer can't open the bubble (and start the
+   * clip) over the conversation; a clip already playing carries on.
+   */
+  const hide = useCallback(() => {
+    markGreeted(browserStore('session'));
+    setOpen(false);
+  }, []);
   /** Show the bubble again (clicking about), silently. */
   const show = useCallback(() => setOpen(true), []);
 

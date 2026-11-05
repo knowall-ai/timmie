@@ -6,7 +6,8 @@ import { GET as status } from '@/app/api/public/status/route';
 import { POST as voice } from '@/app/api/public/voice/session/route';
 import { issuePass, leadingZeroBits, resetPassUsage } from '@/services/public-timmie/pass';
 import { DECLINE_REPLY, OFFLINE_REPLY, PUBLIC_RULES } from '@/services/public-timmie/prompt';
-import { PASS_HEADER } from '@/services/public-timmie/shared';
+import { MAX_TURN_CHARS } from '@/services/public-timmie/messages';
+import { PASS_HEADER, PUBLIC_LIMITS } from '@/services/public-timmie/shared';
 
 // The sideband never connects anywhere in these tests.
 vi.mock('ws', () => ({
@@ -291,7 +292,7 @@ describe('POST /api/public/chat', () => {
     azureReplies('Timmie. '.repeat(700));
     const ip = nextIp();
     const first = await (await ask('Tell me everything', [], ip)).json();
-    expect(first.reply.length).toBeLessThanOrEqual(4000);
+    expect(first.reply.length).toBeLessThanOrEqual(MAX_TURN_CHARS);
     const history = [
       { role: 'user', content: 'Tell me everything' },
       { role: 'assistant', content: first.reply, sig: first.sig, exp: first.exp },
@@ -317,7 +318,7 @@ describe('POST /api/public/chat', () => {
   it('refuses long messages and bad roles', async () => {
     configure();
     azureReplies('unused');
-    expect((await ask('x'.repeat(601))).status).toBe(400);
+    expect((await ask('x'.repeat(PUBLIC_LIMITS.maxMessageChars + 1))).status).toBe(400);
     const ip = nextIp();
     const res = await chat(
       req('/api/public/chat', {

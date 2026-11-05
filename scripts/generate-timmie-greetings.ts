@@ -88,6 +88,7 @@ async function main() {
     if (only && greeting.id !== only) continue;
     const res = await fetch(`${endpoint}/openai/v1/audio/speech`, {
       method: 'POST',
+      signal: AbortSignal.timeout(60_000),
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: deployment,

@@ -49,6 +49,9 @@ type CallUpdate =
   | { type: 'caption'; text: string; final: boolean }
   | { type: 'ended'; reason: string };
 
+/** Reasons a call ends that need no explanation (see services/public-timmie/live.ts). */
+const EXPECTED_ENDS = new Set(['visitor', 'time-limit', 'ended', 'visitor-gone']);
+
 /** Wait for ICE gathering, so the offer carries its candidates (at most a few seconds). */
 function iceGathered(pc: RTCPeerConnection, ms = 3_000): Promise<void> {
   if (pc.iceGatheringState === 'complete') return Promise.resolve();
@@ -80,7 +83,7 @@ export function createLiveVoice(options: {
   /** Forget a spent or expired pass (the server answered 401). */
   clearPass: () => void;
   maxSeconds: number;
-  messages: { micDenied: string; noMic: string; failed: string };
+  messages: { micDenied: string; noMic: string; failed: string; dropped: string };
 }): VoiceAdapter {
   return {
     async start({ greet, speakerMuted, signal, micHold }, handlers) {
@@ -212,7 +215,13 @@ export function createLiveVoice(options: {
           if (update.type === 'speaking') handlers.onSpeaking(update.speaking);
           // The whole reply, never cut mid-sentence.
           if (update.type === 'caption') handlers.onCaption(update.text, update.final);
-          if (update.type === 'ended') stop(false);
+          if (update.type === 'ended') {
+            // The visitor hanging up, the time limit, the service closing the session, or
+            // the visitor's audio stopping are expected ends. Anything else (the sideband
+            // lost, the session never starting, the watchdog) is told to the visitor.
+            if (!EXPECTED_ENDS.has(update.reason)) handlers.onError(options.messages.dropped);
+            stop(false);
+          }
         };
 
         const seconds = body.maxSeconds ?? options.maxSeconds;

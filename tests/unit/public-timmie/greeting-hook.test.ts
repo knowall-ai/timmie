@@ -113,6 +113,15 @@ describe('useGreeting and the speaker', () => {
     expect(result.current.open).toBe(false);
   });
 
+  it('starting to chat or talk in the first 600 ms cancels the pending greeting', async () => {
+    const { result } = greet();
+    act(() => result.current.hide());
+    expect(shouldGreet(session)).toBe(false);
+    await act(() => vi.advanceTimersByTimeAsync(1_000));
+    expect(result.current.open).toBe(false);
+    expect(played).toEqual([]);
+  });
+
   it('does not greet while the helper is unavailable', async () => {
     const { result } = greet(false, false);
     await act(() => vi.advanceTimersByTimeAsync(2000));
