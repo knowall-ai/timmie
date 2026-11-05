@@ -212,11 +212,12 @@ Business Central categorises costs/prices by **line type**:
 | Travel, subscriptions, third-party services
 |===
 
-All KPI cards show a breakdown by these three types:
+All KPI cards show a breakdown by these three types, plus **AI** (AI usage resources, which are Resource lines in BC; see <<AI Usage Costs>>):
 
 ----
 Budget Cost: £2,355.00
   Resource:    £490.00
+  AI:            £0.00
   Item:      £1,865.00
   G/L Account:   £0.00
 From Job Planning Lines
@@ -321,11 +322,34 @@ Provides posted/invoiced data from Job Ledger Entry.
 | postingDate
 | When the entry was posted
 
-| resourceNo
-| The resource who performed the work
+| number
+| The resource who performed the work (the resource number)
 |===
 
-**Note:** Time entries only contain Resource-type entries (labour). Item and G/L Account entries come from other ledger entries.
+**Note:** Time entries only contain Resource-type entries (labour), including Machine resources such as `AI-USAGE`, with no `resourceType`. Item and G/L Account entries come from `/jobCostEntries` below.
+
+=== Job Cost Entries (`/jobCostEntries`)
+
+Every Job Ledger Entry on a project, of every type, for its real costs and prices (Timmie BC Extension 1.28.0.0+). The same fields as `/timeEntries`, plus:
+
+[cols="1,3", options="header"]
+|===
+| Field | Description
+
+| type
+| `Resource`, `Item` or `G/L Account` (BC sends `G_x002F_L_x0020_Account`; Timmie decodes it)
+
+| number
+| The resource, item or G/L account number
+
+| resourceType
+| `Person` or `Machine` on Resource entries, blank otherwise. Machine resources (e.g. `AI-USAGE`) are AI cost, never hours
+
+| quantity
+| Hours on people's Resource entries only. On an AI usage resource it's money (unit cost 1); on Item and G/L Account entries it's a count
+|===
+
+On an extension before 1.28 the endpoint answers 404: Timmie remembers that for the company and uses `/timeEntries` instead, as before, with no warning. Any other failure of either endpoint (401, 403, 429, 500, Business Central unreachable) marks the Actual Cost and Invoiced Price cards "figures incomplete" and hides the margin, rather than showing Resource-only or zero figures.
 
 == Spend vs Budget Chart
 

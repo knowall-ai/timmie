@@ -116,7 +116,12 @@ CONTACT_MAIL_TENANT_ID=<knowall-tenant-id>
 CONTACT_MAIL_CLIENT_ID=<mail-app-client-id>
 CONTACT_MAIL_CLIENT_SECRET=<mail-app-secret>
 FRONT_DOOR_ID=<front-door-profile-id>
+TIMMIE_AI_RESOURCES=AI-USAGE
 ----
+
+=== AI usage resources (`TIMMIE_AI_RESOURCES`)
+
+Optional. The Business Central resource numbers whose job ledger entries and planning lines are AI usage, comma-separated (default `AI-USAGE`; blank means the default). Their quantities are money, so Timmie shows them as the **AI** line in the cost breakdowns and never counts them as hours. Machine resources are always AI on posted entries (Timmie BC Extension 1.28+), so this list is for planning lines and timesheets, which carry no resource type. It's read by the server at request time (`/api/config`), not built into the app, so changing the application setting takes effect on the next page load with no release. See `docs/bc-terminology.adoc`, "AI Usage Costs".
 
 === Approved organisations (`APPROVED_TENANT_IDS`)
 
