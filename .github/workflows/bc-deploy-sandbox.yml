@@ -49,7 +49,8 @@ jobs:
 
             # Decode JWT to see claims (for debugging)
             $tokenParts = $accessToken.Split('.')
-            $payload = $tokenParts[1]
+            # JWTs are Base64url: swap its two characters for standard Base64 before decoding
+            $payload = $tokenParts[1].Replace('-', '+').Replace('_', '/')
             # Add padding if needed
             $padding = 4 - ($payload.Length % 4)
             if ($padding -ne 4) { $payload += '=' * $padding }

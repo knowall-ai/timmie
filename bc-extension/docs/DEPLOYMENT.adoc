@@ -196,6 +196,7 @@ The workflow at `.github/workflows/bc-deploy-production.yml` already declares `e
   `https://github.com/knowall-ai/timmie/settings/environments/`
 . Tick *Required reviewers* and add one or two trusted users
 . Tick *Prevent self-review*, so whoever starts a deploy can't be the one who approves it
+. Untick *Allow administrators to bypass configured protection rules*, or an administrator can skip the gate
 . Optional: tick *Wait timer* and set 5–10 minutes to provide an abort window
 . Optional: under *Deployment branches and tags*, restrict to the `bc-v*` tag pattern, plus `main` if you want manual runs so only properly tagged releases can deploy
 . Click *Save protection rules*
