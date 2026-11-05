@@ -309,6 +309,17 @@ export function pickLatestPlanReviews(reviews: BCPlanReview[]): Record<string, B
   return latest;
 }
 
+/**
+ * BC's refusal to apply a stale finding names the agent the extension was written for
+ * ("The plan changed since Poppie looked. Ask her to re-review."). Say it with the
+ * organisation's agent instead; any other message is passed through as it is.
+ */
+export function planChangedText(message: string, agentName: string): string {
+  return /^The plan changed since .+ looked\./i.test(message)
+    ? `The plan changed since ${agentName} looked. Ask it to re-review.`
+    : message;
+}
+
 /** Requested or Running: the agent hasn't finished it yet */
 export function isOpenPlanReviewRequest(request: Pick<BCPlanReviewRequest, 'status'>): boolean {
   return request.status === 'Requested' || request.status === 'Running';

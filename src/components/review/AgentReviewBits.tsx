@@ -346,6 +346,8 @@ export function AgentVerdictChip({ result }: { result: TimesheetReviewResult }) 
   const { status, verdict } = result;
   if (!verdict || (status !== 'current' && status !== 'outOfDate')) return null;
   const outOfDate = status === 'outOfDate';
+  // A saved review is credited to whoever signed it, which may be a previous agent
+  const name = result.review?.reviewer?.trim() || agentName;
   return (
     <span
       className={cn(
@@ -355,8 +357,8 @@ export function AgentVerdictChip({ result }: { result: TimesheetReviewResult }) 
       )}
       title={
         outOfDate
-          ? `${agentName}: ${verdict.label} (out of date - the timesheet changed after its review)`
-          : `${agentName}: ${verdict.label}`
+          ? `${name}: ${verdict.label} (out of date - the timesheet changed after its review)`
+          : `${name}: ${verdict.label}`
       }
     >
       <AgentAvatar reviewer={result.review?.reviewer} className="h-4 w-4 text-[9px]" />

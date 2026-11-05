@@ -93,7 +93,21 @@ az webapp config ssl bind \
    - Dynamics 365 Business Central: `.default`
 3. Grant admin consent
 
-=== 4. Create Client Secret (if needed for backend)
+=== 4. Define the Timmie administrator role
+
+Users with this app role can change an organisation's settings (see _Organisation settings_ below). KnowAll's registration already has it; a new registration needs it created:
+
+1. Go to App roles → "Create app role"
+2. Configure:
+   - Display name: `Timmie administrator`
+   - Allowed member types: `Users/Groups`
+   - Value: `Timmie.Admin`
+   - Description: `Can change the organisation's Timmie settings`
+3. Tick "Do you want to enable this app role?" and apply
+
+Each organisation then assigns the role to its own people in _Enterprise applications_, as described under _Organisation settings_.
+
+=== 5. Create Client Secret (if needed for backend)
 
 1. Go to Certificates & secrets
 2. Create new client secret
@@ -175,7 +189,7 @@ Don't set `AZURE_CLIENT_ID` on the App Service. The Azure SDK would take it as a
 
 Without `ORG_SETTINGS_TABLE_ENDPOINT`, a production server can't keep settings: every organisation gets Timmie's own agent, *Settings > AI Agent* tells administrators that settings can't be saved, and saving answers 503. (A development server keeps them in memory until it restarts.)
 
-Who can change them: users with the *Timmie administrator* app role (`Timmie.Admin`, defined on the Timmie app registration). Each organisation assigns it in its own Entra ID: *Enterprise applications* → Timmie → *Users and groups* → *Add user/group* → choose the person or group and the *Timmie administrator* role. Assign it to whoever manages Timmie for the organisation (usually its IT admin or the person who set Timmie up). The user signs out and back in to pick it up. Everyone else can see the setting but not change it.
+Who can change them: users with the *Timmie administrator* app role (`Timmie.Admin`, defined on the Timmie app registration as in _Entra ID App Registration_, step 4). Each organisation assigns it in its own Entra ID: *Enterprise applications* → Timmie → *Users and groups* → *Add user/group* → choose the person (or a group, if the role allows groups; KnowAll's allows users only) and the *Timmie administrator* role. Assign it to whoever manages Timmie for the organisation (usually its IT admin or the person who set Timmie up). The user signs out and back in to pick it up. Everyone else can see the setting but not change it.
 
 IMPORTANT: An organisation that runs its own agent should set its name straight after deploying a version with this setting: *Settings > AI Agent* → *Your own agent* → the name the agent signs its reviews with (and writes its heartbeat under) → *Save*. Until then Timmie calls the agent "Timmie", though its online/offline status still works (on Timmie's own agent, any agent's heartbeat counts). Once a custom name is set, Timmie only counts heartbeats with that name, so it must match the name the agent writes its heartbeat under.
 

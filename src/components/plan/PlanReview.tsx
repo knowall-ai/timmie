@@ -45,6 +45,7 @@ import {
   getPlanVerdictDisplay,
   isOpenPlanReviewRequest,
   planCellManualMessage,
+  planChangedText,
   planReviewRequestText,
   sortPlanReviewLines,
   summarizePlanReviewWeek,
@@ -373,6 +374,8 @@ function PlanReviewPopover({
     });
 
   const sorted = sortSubjects(subjects);
+  // The saved reviews are credited to whoever signed them, which may be a previous agent
+  const reviewer = sorted.find((s) => s.review)?.review?.reviewer;
   const weekEnd = format(parseISO(weekStart), 'd MMM');
 
   return createPortal(
@@ -391,12 +394,9 @@ function PlanReviewPopover({
     >
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
-          <AgentAvatar
-            reviewer={sorted.find((s) => s.review)?.review?.reviewer}
-            className="h-6 w-6"
-          />
+          <AgentAvatar reviewer={reviewer} className="h-6 w-6" />
           <h3 id={titleId} className="truncate text-sm font-semibold text-white">
-            {agentName}&apos;s review · Week {weekNumber}
+            {reviewer?.trim() || agentName}&apos;s review · Week {weekNumber}
             <span className="text-dark-400 ml-1 text-xs font-normal">from {weekEnd}</span>
           </h3>
         </div>
@@ -537,6 +537,7 @@ function Finding({
   subject: PlanReviewSubjectWeek;
   context: PlanReviewContextValue;
 }) {
+  const agentName = useAgentName();
   const [state, setState] = useState<{ kind: 'idle' | 'applying'; message?: string }>({
     kind: 'idle',
   });
@@ -560,10 +561,13 @@ function Finding({
       setState({ kind: 'idle' });
       toast.success(changes.length === 1 ? 'Change applied' : 'Changes applied');
     } catch (error) {
-      // BC's own words, e.g. "The plan changed since the agent looked. Ask it to re-review."
+      // BC's own words, except that its stale-plan refusal names the organisation's agent
       setState({
         kind: 'idle',
-        message: bcErrorText(error, "Couldn't apply the change. Please try again."),
+        message: planChangedText(
+          bcErrorText(error, "Couldn't apply the change. Please try again."),
+          agentName
+        ),
       });
     }
   };

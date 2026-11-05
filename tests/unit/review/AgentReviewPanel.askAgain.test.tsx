@@ -61,9 +61,12 @@ describe('AgentReviewPanel: Ask Timmie to look again', () => {
   it('offers the button on an out-of-date review, and says so in the banner', () => {
     render(<AgentReviewPanel result={result()} variant="submitter" />);
     expect(button()).toBeInTheDocument();
+    // The saved review is credited to whoever signed it, even after the organisation's agent changed
+    expect(screen.getByRole('heading', { name: "Poppie's recommendation" })).toBeInTheDocument();
     expect(
       screen.getByText(
-        'This timesheet changed after Timmie reviewed it. Ask it to look again, or it will once it’s resubmitted.'
+        // The saved review is Poppie's; the next look is the organisation's agent's (Timmie)
+        'This timesheet changed after Poppie reviewed it. Ask Timmie to look again, or it will once it’s resubmitted.'
       )
     ).toBeInTheDocument();
   });
@@ -78,7 +81,7 @@ describe('AgentReviewPanel: Ask Timmie to look again', () => {
     expect(button()).not.toBeInTheDocument();
     expect(
       screen.getByText(
-        'This timesheet changed after Timmie reviewed it. Timmie will take another look once it’s resubmitted.'
+        'This timesheet changed after Poppie reviewed it. Timmie will take another look once it’s resubmitted.'
       )
     ).toBeInTheDocument();
   });

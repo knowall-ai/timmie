@@ -116,13 +116,16 @@ export function AgentReviewPanel({
     notes.some((note) => note.severity === 'Issue' || note.severity === 'Warning');
   const showRejectAction = !!onUseAsRejectionComment && hasConcerns;
   const isCollapsed = collapsible && collapsed;
+  // The saved review is credited to whoever signed it (maybe a previous agent); anything
+  // still to happen ("will re-review", "Ask ... to look again") is the current agent's
+  const reviewerName = review.reviewer?.trim() || agentName;
 
   return shell(
     <>
       {/* Header: who, verdict, and the collapse toggle */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <AgentAvatar reviewer={review.reviewer} />
-        <h3 className="text-sm font-semibold text-white">{agentName}&apos;s recommendation</h3>
+        <h3 className="text-sm font-semibold text-white">{reviewerName}&apos;s recommendation</h3>
         <span
           className={cn(
             'rounded-full px-2 py-0.5 text-xs font-medium',
@@ -148,7 +151,9 @@ export function AgentReviewPanel({
             onClick={() => setCollapsed(!collapsed)}
             aria-expanded={!isCollapsed}
             aria-controls={bodyId}
-            aria-label={isCollapsed ? `Show ${agentName}'s review` : `Hide ${agentName}'s review`}
+            aria-label={
+              isCollapsed ? `Show ${reviewerName}'s review` : `Hide ${reviewerName}'s review`
+            }
             className="text-dark-400 hover:bg-dark-700 ml-auto rounded-md p-1 hover:text-white"
           >
             {isCollapsed ? (
@@ -165,10 +170,10 @@ export function AgentReviewPanel({
           {outOfDate && (
             <p className="rounded-md bg-amber-500/10 px-2 py-1 text-xs text-amber-300">
               {submitted
-                ? `This timesheet changed after ${agentName} reviewed it. ${agentName} will re-review the changes shortly.`
+                ? `This timesheet changed after ${reviewerName} reviewed it. ${agentName} will re-review the changes shortly.`
                 : result.canRequestReview
-                  ? `This timesheet changed after ${agentName} reviewed it. Ask it to look again, or it will once it’s resubmitted.`
-                  : `This timesheet changed after ${agentName} reviewed it. ${agentName} will take another look once it’s resubmitted.`}
+                  ? `This timesheet changed after ${reviewerName} reviewed it. Ask ${agentName} to look again, or it will once it’s resubmitted.`
+                  : `This timesheet changed after ${reviewerName} reviewed it. ${agentName} will take another look once it’s resubmitted.`}
             </p>
           )}
 
@@ -202,7 +207,7 @@ export function AgentReviewPanel({
 
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-dark-500 text-xs">
-              {`Reviewed by ${review.reviewer || agentName} (AI)${reviewedAgo ? ` ${reviewedAgo}` : ''}.`}
+              {`Reviewed by ${reviewerName} (AI)${reviewedAgo ? ` ${reviewedAgo}` : ''}.`}
             </p>
             {showRejectAction && (
               <Button

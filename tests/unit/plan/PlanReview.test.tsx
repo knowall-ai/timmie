@@ -206,8 +206,30 @@ describe('PlanReview popover', () => {
     expect(screen.queryByRole('button', { name: 'Apply change' })).not.toBeInTheDocument();
   });
 
+  it("says a stale plan with the organisation's agent, not the name BC uses", async () => {
+    renderChip(
+      context([subject()], {
+        canApply: () => true,
+        onApply: vi.fn(async () => {
+          throw new Error(
+            `BC API Error (400): ${JSON.stringify({
+              error: {
+                code: 'Application_DialogException',
+                message: 'The plan changed since Poppie looked. Ask her to re-review.',
+              },
+            })}`
+          );
+        }),
+      })
+    );
+    openPopover();
+    fireEvent.click(screen.getByRole('button', { name: 'Apply change' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The plan changed since Timmie looked. Ask it to re-review.'
+    );
+  });
+
   it.each([
-    'The plan changed since Timmie looked. Ask it to re-review.',
     "Edit this cell by hand: its planning line is Billable, part of the project's budget estimate.",
     "You don't have permission to change the plan.",
   ])("shows BC's refusal as it is: %s", async (message) => {
