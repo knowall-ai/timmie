@@ -105,20 +105,25 @@ the agent's name and whether it is online.
 The setting is also the hosted worker's switch. The worker's tenant registry reads `OrgSettings`,
 and it schedules sweeps and claims requests only for organisations set to *Timmie*. When an admin
 switches to *Your own agent* or *None*, the worker stops claiming that organisation's requests
-and drops its sweeps from the next tick, and stops its heartbeat. A running request is finished.
-A running sweep checks the setting between subjects (one person's or project's week, one day's
-suggestions) and stops at the next one, so it ends within a minute or two.
+and drops its sweeps from the next tick. A running request is finished. A running sweep checks
+the setting between subjects (one person's or project's week, one day's suggestions) and stops
+at the next one, so it ends within a minute or two. The heartbeat keeps beating until all of that
+work has stopped, and only then stops; it is a presence indicator, not a lock.
 
-*Handover.* Two agents must not work one organisation at once, and a switch can't stop the
-outgoing agent instantly, so the rule is: the incoming agent claims no request and runs no sweep
-for an organisation until every other agent's heartbeat there is stale (5 minutes without one,
-the same test the web app uses for "online"). The shared core in `agent/` enforces this for the
-worker, the skill pack and the MCP server alike, so it holds in both directions: a custom agent
-starting up waits for the worker to go quiet, and the worker, when switched back on, waits for
-the custom agent to stop beating. A request the outgoing agent was holding when it stopped is
-left Running and reclaimed by the new agent after 30 minutes, like any stale request. Switching
-back to *Timmie* needs nothing more than the setting, as long as the consent and BC app user are
-still in place.
+*Handover.* Two agents must not work one company at once, and heartbeats can't guarantee that
+(two agents starting together both see stale heartbeats). So ownership is a *lease* in BC, one
+record per company (`agentLeases`: owner agent, lease expiry). An agent takes it with a
+conditional write (`If-Match` on the record's ETag), which BC makes atomic: of two agents trying
+at once, exactly one succeeds. It renews the lease with every heartbeat and releases it when its
+work has stopped. Claiming a request and running a sweep both require holding the lease, and
+every write checks it is still held, so an agent that loses the lease (expired, or taken after
+expiry) stops without writing. The incoming agent gets the lease only when the outgoing agent
+releases it or lets it expire, which happens after its work has drained. The shared core in
+`agent/` does all of this for the worker, the skill pack and the MCP server alike, so it holds in
+both directions. A request the outgoing agent was holding when it lost the lease is left Running
+and reclaimed by the new agent after 30 minutes, like any stale request. Switching back to
+*Timmie* needs nothing more than the setting, as long as the consent and BC app user are still
+in place.
 
 == The contract: the Timmie BC Extension API
 
@@ -167,6 +172,11 @@ All entities are under `/api/knowall/thyme/v1.0/companies({id})/`.
 | `agentName`, `lastSeenAt`, status, version
 | Agent only, about once a minute
 | Online if seen in the last 5 minutes
+
+| `agentLeases` (new)
+| One record per company: `ownerAgent`, `expiresAt`. Who may work this company (see _Handover_)
+| Agent only, by conditional write (`If-Match`); renewed with the heartbeat
+| Held → released, or expired and taken over
 
 | `projectSourceLinks`, `dayNotes`, `projectNotes`
 | Hints the agent reads: repos, meeting keywords, off-sites, project notes
