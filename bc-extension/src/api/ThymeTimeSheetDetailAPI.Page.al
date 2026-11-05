@@ -138,18 +138,15 @@ page 50106 "Thyme Time Sheet Detail API"
         AllocatedQty: array[7] of Decimal;
         DayDate: Date;
     begin
-        // The same checks as OnInsertRecord: an error, not a silent no-op, so the client knows
-        // that nothing was saved.
         if not TimeSheetLine.Get(Rec."Time Sheet No.", Rec."Time Sheet Line No.") then
-            Error('Time Sheet Line %1-%2 not found', Rec."Time Sheet No.", Rec."Time Sheet Line No.");
+            exit(false);
 
         if not TimeSheetHeader.Get(Rec."Time Sheet No.") then
-            Error('Time Sheet %1 not found', Rec."Time Sheet No.");
+            exit(false);
 
         DayIndex := Rec.Date - TimeSheetHeader."Starting Date" + 1;
         if (DayIndex < 1) or (DayIndex > 7) then
-            Error('Date %1 is outside time sheet period %2 to %3',
-                Rec.Date, TimeSheetHeader."Starting Date", TimeSheetHeader."Ending Date");
+            exit(false);
 
         // Get current allocations
         for i := 1 to 7 do begin

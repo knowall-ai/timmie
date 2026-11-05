@@ -183,8 +183,6 @@ table 50104 "Thyme Suggestion Request"
         Resource.LockTable();
         if Resource.Get("Resource No.") then;
 
-        // Committed rows only, so another session's uncommitted Done or Failed can't hide an open request
-        Existing.ReadIsolation := IsolationLevel::ReadCommitted;
         Existing.SetCurrentKey("Resource No.", "From Date", "To Date", Status);
         Existing.SetRange("Resource No.", "Resource No.");
         Existing.SetRange("From Date", "From Date");

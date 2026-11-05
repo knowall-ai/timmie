@@ -97,15 +97,6 @@ table 50101 "Thyme Timesheet Review Line"
     end;
 
     /// <summary>
-    /// Changing the key (a PATCH of a key field) would move the finding to another review without
-    /// the OnModify checks, so it is refused: delete it and create a new one instead.
-    /// </summary>
-    trigger OnRename()
-    begin
-        Error(RenameNotAllowedErr);
-    end;
-
-    /// <summary>
     /// Fills the time sheet number from the parent review when it is blank, and rejects
     /// a finding that points at a different time sheet than its review.
     /// </summary>
@@ -127,5 +118,4 @@ table 50101 "Thyme Timesheet Review Line"
     var
         ReviewNotFoundErr: Label 'Timesheet review %1 does not exist.', Comment = '%1 = review entry number';
         TimeSheetMismatchErr: Label 'Time sheet %1 does not match time sheet %2 on review %3.', Comment = '%1 = time sheet number on the finding, %2 = time sheet number on the review, %3 = review entry number';
-        RenameNotAllowedErr: Label 'A finding''s review entry number and line number can''t be changed. Delete the finding and create a new one instead.';
 }

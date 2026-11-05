@@ -2,7 +2,7 @@
   "id": "f879df78-af6d-44cb-987e-ac54c2755e71",
   "name": "Thyme BC API Extension",
   "publisher": "KnowAll",
-  "version": "1.27.0.5",
+  "version": "1.27.0.4",
   "brief": "Custom API endpoints for Thyme time tracking app",
   "description": "Exposes Projects, Job Tasks, Time Sheets, Resources, and Time Entries with additional fields not available in the standard BC API v2.0, and stores AI timesheet reviews and AI time-entry suggestions",
   "privacyStatement": "https://knowall.ai/privacy",

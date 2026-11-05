@@ -7,7 +7,7 @@
 /// Endpoint: /api/knowall/thyme/v1.0/companies({companyId})/jobPlanningLines
 ///
 /// POST to create/update planning lines (upsert behavior):
-/// - If a line exists for the same jobNo + jobTaskNo + planningDate + type + lineType + number, quantity is updated
+/// - If a line exists for the same jobNo + jobTaskNo + planningDate + number, quantity is updated
 /// - Otherwise a new line is created
 /// Required fields: jobNo, jobTaskNo, planningDate, number, quantity
 /// Optional: type (defaults to Resource), lineType (defaults to Budget)
@@ -187,14 +187,13 @@ page 50107 "Thyme Job Planning Lines API"
         NextLineNo: Integer;
     begin
         LockProject();
-        // Upsert logic: Check if a line already exists for the same job/task/date/type/line type/resource
+        // Upsert logic: Check if a line already exists for the same job/task/date/resource/type
         // Lock the table to prevent race conditions with concurrent inserts
         ExistingLine.LockTable();
         ExistingLine.SetRange("Job No.", Rec."Job No.");
         ExistingLine.SetRange("Job Task No.", Rec."Job Task No.");
         ExistingLine.SetRange("Planning Date", Rec."Planning Date");
         ExistingLine.SetRange(Type, Rec.Type);
-        ExistingLine.SetRange("Line Type", Rec."Line Type");
         ExistingLine.SetRange("No.", Rec."No.");
 
         if ExistingLine.FindFirst() then begin

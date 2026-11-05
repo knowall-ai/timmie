@@ -39,9 +39,7 @@ permissionset 50101 "THYME USER"
         tabledata "Thyme Timesheet Review Line" = R,
         tabledata "Thyme Time Suggestion" = RM,
         tabledata "Thyme Setup" = R,
-        // Direct read; insert only indirect, so requests are created only through the
-        // suggestionRequests API page, whose insert trigger checks who the request is for.
-        tabledata "Thyme Suggestion Request" = Ri,
+        tabledata "Thyme Suggestion Request" = RI,
         tabledata "Thyme Agent Heartbeat" = R,
         tabledata "Thyme Plan Review" = R,
         // Direct read; indirect modify only, so codeunit "Thyme Plan Review Apply" can stamp a finding

@@ -32,8 +32,6 @@ page 50114 "Thyme Suggestion Requests API"
     DelayedInsert = true;
     ODataKeyFields = SystemId;
     Extensible = false;
-    // THYME USER's insert on requests is indirect: only this page may create them, after the check below
-    Permissions = tabledata "Thyme Suggestion Request" = i;
 
     layout
     {
