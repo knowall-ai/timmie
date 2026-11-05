@@ -12,15 +12,29 @@ const CHEVRON =
   '<svg class="text-dark-400 mt-1 h-5 w-5 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 111.08 1.04l-4.25 4.39a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" /></svg>';
 
 function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 80);
+  return (
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 80) || 'question'
+  );
 }
 
-// Replace each table's rows (first cell: question, second: answer) with <details> elements
-function tablesToDisclosures(html: string): string {
+// The id in the address bar, or null if there is none or it isn't valid
+function hashId(): string | null {
+  const hash = window.location.hash.slice(1);
+  if (!hash) return null;
+  try {
+    return decodeURIComponent(hash);
+  } catch {
+    return null;
+  }
+}
+
+// Replace each table's rows (first cell: question, second: answer) with <details> elements.
+// Exported for tests.
+export function tablesToDisclosures(html: string): string {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const usedIds = new Set<string>();
 
@@ -81,14 +95,23 @@ export function AsciidocContent({ content, collapsibleTables = false }: Asciidoc
     });
   }, [content, collapsibleTables]);
 
-  // A link to one question (e.g. /help#timer-state-lost-on-refresh) opens it
+  // A link to one question (e.g. /help#timer-state-lost-on-refresh) opens it, both on
+  // first load and when the hash changes while the page is already open
   useEffect(() => {
-    if (!html || !collapsibleTables || !window.location.hash) return;
-    const target = document.getElementById(decodeURIComponent(window.location.hash.slice(1)));
-    if (target instanceof HTMLDetailsElement) {
-      target.open = true;
-      target.scrollIntoView({ block: 'start' });
-    }
+    if (!html || !collapsibleTables) return;
+
+    const openLinkedQuestion = () => {
+      const id = hashId();
+      const target = id ? document.getElementById(id) : null;
+      if (target instanceof HTMLDetailsElement) {
+        target.open = true;
+        target.scrollIntoView({ block: 'start' });
+      }
+    };
+
+    openLinkedQuestion();
+    window.addEventListener('hashchange', openLinkedQuestion);
+    return () => window.removeEventListener('hashchange', openLinkedQuestion);
   }, [html, collapsibleTables]);
 
   if (!html) {
