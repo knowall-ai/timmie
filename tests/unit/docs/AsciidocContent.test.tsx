@@ -171,6 +171,33 @@ describe('tablesToDisclosures', () => {
     expect(parse(mixed).querySelectorAll('details').length).toBe(1);
   });
 
+  it('keeps a table nested in an answer, and does not count its rows as questions', () => {
+    const doc = parse(
+      tablesToDisclosures(
+        toHtml(`|===
+| Problem | Solution
+
+| Which port?
+a| It depends:
+!===
+! Script ! Port
+
+! dev ! 3101
+! start ! 3000
+!===
+|===`)
+      )
+    );
+    const details = doc.querySelectorAll('details');
+    expect(details.length).toBe(1);
+    expect(details[0].querySelector('summary')?.textContent?.trim()).toBe('Which port?');
+
+    const nested = details[0].querySelector('div table');
+    expect(nested).not.toBeNull();
+    expect(nested?.querySelectorAll('tbody tr').length).toBe(2);
+    expect(doc.querySelectorAll('table').length).toBe(1);
+  });
+
   it('leaves text and lists outside the tables alone', () => {
     const html = tablesToDisclosures(toHtml('Intro paragraph.\n\n* one\n* two'));
     const doc = parse(html);

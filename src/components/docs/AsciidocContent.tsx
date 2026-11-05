@@ -41,10 +41,11 @@ export function tablesToDisclosures(html: string): string {
   doc.querySelectorAll('table').forEach((table) => {
     // Only a question-and-answer table: every row has exactly two cells, both plain
     // (a header-style column renders as <th>). Any other shape is left as a table
-    // rather than losing or inventing cells.
-    const rows = Array.from(table.querySelectorAll('tbody tr')).map((row) =>
-      Array.from(row.children)
-    );
+    // rather than losing or inventing cells. Only this table's own rows count: a
+    // table nested in an answer stays as it is inside that answer.
+    const rows = Array.from(table.tBodies)
+      .flatMap((tbody) => Array.from(tbody.rows))
+      .map((row) => Array.from(row.children));
     if (
       rows.length === 0 ||
       rows.some((cells) => cells.length !== 2 || cells.some((cell) => cell.tagName !== 'TD'))
