@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, ReactNode, useEffect, useMemo } from 'react';
+import { Fragment, ReactNode, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { BuildingOffice2Icon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
@@ -50,16 +50,21 @@ export function CompanyRouteGate({ environment, companyId, children }: CompanyRo
   // other company's, rather than wait for a demo that can't start.
   const isDemo = useIsDemoMode();
   const canStart = useCanStartDemo();
+  // Set if the flag still can't be written when the demo starts (canStartDemo probes
+  // a write, so this is a race at most)
+  const [startFailed, setStartFailed] = useState(false);
   const demoLink = !isDemo && isDemoCompany(companyId);
-  const openDemo = demoLink && canStart;
+  const openDemo = demoLink && canStart && !startFailed;
   useEffect(() => {
-    if (openDemo) startDemo(`${window.location.pathname}${window.location.search}`);
+    if (!openDemo) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a one-off fallback, not a loop
+    if (!startDemo(`${window.location.pathname}${window.location.search}`)) setStartFailed(true);
   }, [openDemo]);
   useEffect(() => {
-    if (demoLink && !canStart) {
+    if (demoLink && (!canStart || startFailed)) {
       toast.error('The demo needs browser storage, which this browser is blocking.');
     }
-  }, [demoLink, canStart]);
+  }, [demoLink, canStart, startFailed]);
   if (openDemo) {
     return (
       <div className="bg-dark-950 flex min-h-screen items-center justify-center" role="status">

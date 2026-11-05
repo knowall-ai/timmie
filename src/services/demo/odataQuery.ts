@@ -151,8 +151,18 @@ function compareValues(actual: unknown, expected: Literal, isDate: boolean): num
   }
   const text = actual === null || actual === undefined ? '' : String(actual);
   // A date literal against a date-time value compares the date part
-  const value = isDate && expected.length === 10 ? text.slice(0, 10) : text;
-  return value === expected ? 0 : value < expected ? -1 : 1;
+  if (isDate && expected.length === 10) {
+    const value = text.slice(0, 10);
+    return value === expected ? 0 : value < expected ? -1 : 1;
+  }
+  // A date-time literal compares as an instant, so 10:00:00Z equals 10:00:00.000Z
+  if (isDate) {
+    const a = Date.parse(text);
+    const b = Date.parse(expected);
+    if (Number.isNaN(a) || Number.isNaN(b)) return null;
+    return a === b ? 0 : a < b ? -1 : 1;
+  }
+  return text === expected ? 0 : text < expected ? -1 : 1;
 }
 
 function evaluate(node: FilterNode, row: Row): boolean {
@@ -218,9 +228,9 @@ export function queryRows<T extends Row>(rows: T[], params: URLSearchParams): T[
   result = orderRows(result, params.get('$orderby'));
   const top = params.get('$top');
   if (top !== null) {
-    const count = Number(top);
-    if (!Number.isInteger(count) || count < 0) throw new ODataQueryError('Invalid $top');
-    result = result.slice(0, count);
+    // Decimal digits only: not '', '0x10' or '1e2'
+    if (!/^\d+$/.test(top)) throw new ODataQueryError('Invalid $top');
+    result = result.slice(0, Number.parseInt(top, 10));
   }
   return result;
 }

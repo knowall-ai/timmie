@@ -38,6 +38,26 @@ describe('demo OData filters', () => {
     expect(() => filterRows(rows, "(no eq 'A'")).toThrow(ODataQueryError);
   });
 
+  it('compares date-time literals as instants', () => {
+    const stamped = [
+      { no: 'A', at: '2026-10-22T10:00:00.000Z' },
+      { no: 'B', at: '2026-10-22T11:30:00.000Z' },
+    ];
+    expect(nos(filterRows(stamped, 'at ge 2026-10-22T10:00:00Z'))).toEqual(['A', 'B']);
+    expect(nos(filterRows(stamped, 'at gt 2026-10-22T11:00:00+01:00'))).toEqual(['B']);
+    expect(nos(filterRows(stamped, 'at eq 2026-10-22T10:00:00Z'))).toEqual(['A']);
+    expect(filterRows([{ no: 'X', at: 'not a date' }], 'at ge 2026-10-22T10:00:00Z')).toEqual([]);
+  });
+
+  it('reads $top strictly', () => {
+    const top = (value: string) => queryRows(rows, new URLSearchParams({ $top: value }));
+    expect(top('2')).toHaveLength(2);
+    expect(top('0')).toHaveLength(0);
+    for (const bad of ['', ' ', '0x10', '1e2', '-1', '1.5']) {
+      expect(() => top(bad)).toThrow(ODataQueryError);
+    }
+  });
+
   it('orders and limits', () => {
     expect(nos(orderRows(rows, 'hours desc'))).toEqual(['A', 'B', 'C']);
     expect(nos(orderRows(rows, 'date asc'))).toEqual(['A', 'B', 'C']);

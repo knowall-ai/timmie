@@ -214,6 +214,85 @@ describe('DemoBcServer', () => {
     ).not.toBe('');
   });
 
+  it('refuses to apply a plan review once the plan has moved on', async () => {
+    const { get, send, server } = serverAt();
+    await get('/planReviews');
+    const finding = server.snapshot.tables.planReviewLines.find(
+      (l) => l.check === 'OVER_CAPACITY'
+    )!;
+    const change = server.snapshot.tables.planReviewChanges.find(
+      (c) => c.reviewLineNo === finding.lineNo && c.reviewEntryNo === finding.reviewEntryNo
+    )!;
+    const line = server.snapshot.tables.jobPlanningLines.find(
+      (l) =>
+        l.lineType === 'Budget' &&
+        l.number === change.resourceNo &&
+        l.jobNo === change.jobNo &&
+        l.planningDate === change.planningDate
+    )!;
+    // Someone edits the cell after Poppie looked (line is the live row: note its hours first)
+    const before = line.quantity;
+    const edited = await send(`/jobPlanningLines(${line.id})`, 'PATCH', {
+      quantity: before + 1,
+    });
+    expect(edited.status).toBe(200);
+
+    const refused = await send(
+      `/planReviewLines(${finding.id})/Microsoft.NAV.applyChanges`,
+      'POST'
+    );
+    expect(refused.status).toBe(400);
+    expect(server.snapshot.tables.jobPlanningLines.find((l) => l.id === line.id)!.quantity).toBe(
+      before + 1
+    );
+    expect(server.snapshot.tables.planReviewLines.find((l) => l.id === finding.id)!.appliedAt).toBe(
+      ''
+    );
+  });
+
+  it("reviews a timesheet against the person's saved weekly capacity", async () => {
+    const { get, send, advance } = serverAt();
+    const [sheet] = (
+      await get<{ value: BCTimeSheet[] }>(
+        `/timeSheets${filter(`resourceNo eq 'R0060' and startingDate eq ${WEEK}`)}`
+      )
+    ).value;
+    const [resource] = (
+      await get<{ value: { id: string }[] }>(`/resources${filter("number eq 'R0060'")}`)
+    ).value;
+    // Settings changes their capacity before the review is asked for
+    const saved = await send(`/resources(${resource.id})`, 'PATCH', {
+      weeklyCapacityHours: 100,
+      weeklyCapacitySet: true,
+    });
+    expect(saved.status).toBe(200);
+
+    await send('/timesheetReviewRequests', 'POST', { timeSheetNo: sheet.number });
+    advance(DEMO_AGENT_FINISH_MS);
+    const notes = await get<{ value: { note: string }[] }>(
+      `/timesheetReviewLines${filter(`timeSheetNo eq '${sheet.number}'`)}`
+    );
+    expect(notes.value.some((n) => n.note.includes('100-hour week'))).toBe(true);
+  });
+
+  it('marks a request Poppie cannot finish as Failed and carries on', async () => {
+    const { get, send, advance } = serverAt();
+    const created = await send('/planReviewRequests', 'POST', {
+      subjectType: 'Resource',
+      subjectNo: 'R0020',
+      weekStart: 'not-a-date',
+    });
+    const request = (await created.json()) as { id: string };
+    advance(DEMO_AGENT_FINISH_MS);
+    // The pass that fails must not fail this call, nor the ones after it
+    const failed = await get<{ status: string; errorMessage: string }>(
+      `/planReviewRequests(${request.id})`
+    );
+    expect(failed.status).toBe('Failed');
+    expect(failed.errorMessage).not.toBe('');
+    expect((await send('/projects', 'GET')).status).toBe(200);
+  });
+
   it('has Poppie pick up a request and finish it a few seconds later', async () => {
     const { get, send, advance } = serverAt();
     const before = countOf(await get(`/timeSuggestions`));

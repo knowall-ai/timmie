@@ -14,13 +14,13 @@ import type {
 } from '@/types';
 import { computePlanHash, planHashEntriesFromLines } from '@/utils/planReview';
 import { buildUOMConversionMap, convertToHours } from '@/utils/unitConversion';
+import { resolveWeeklyCapacity } from '@/utils/weeklyCapacity';
 import { DEMO_COMPANY_ID, DEMO_ENVIRONMENT, DEMO_STORAGE_PREFIX } from './demoMode';
 import {
   createDemoData,
   DEMO_DATA_VERSION,
   demoEtag,
   demoGuid,
-  demoPerson,
   type DemoData,
   type DemoTables,
 } from './demoFixtures';
@@ -194,7 +194,11 @@ export class DemoBcServer {
         changed = true;
       }
       if (changed) this.save();
-    })();
+    })().catch((error: unknown) => {
+      // Try again on the next request rather than fail every one
+      this.ready = null;
+      throw error;
+    });
     return this.ready;
   }
 
@@ -712,8 +716,8 @@ export class DemoBcServer {
     const changes = tables.planReviewChanges.filter(
       (c) => c.reviewEntryNo === finding.reviewEntryNo && c.reviewLineNo === finding.lineNo
     );
-    for (const change of changes) {
-      const cellLines = tables.jobPlanningLines.filter(
+    const cellOf = (change: (typeof changes)[number]) =>
+      tables.jobPlanningLines.filter(
         (l) =>
           l.jobNo === change.jobNo &&
           l.jobTaskNo === change.jobTaskNo &&
@@ -722,7 +726,22 @@ export class DemoBcServer {
           l.lineType === 'Budget' &&
           l.planningDate.slice(0, 10) === change.planningDate
       );
-      const [first, ...others] = cellLines;
+    // Every cell must still hold the hours Poppie saw, or the review is out of date and
+    // applying it would overwrite later edits: refuse the lot before changing anything
+    for (const change of changes) {
+      const hours = cellOf(change).reduce(
+        (sum, l) => sum + l.quantity * this.unitHours(l.number, l.unitOfMeasureCode ?? 'HOUR'),
+        0
+      );
+      if (Math.abs(hours - change.currentHours) > 0.001) {
+        throw new DemoHttpError(
+          400,
+          'The plan has changed since Poppie reviewed it. Ask her to review it again.'
+        );
+      }
+    }
+    for (const change of changes) {
+      const [first, ...others] = cellOf(change);
       tables.jobPlanningLines = tables.jobPlanningLines.filter((l) => !others.includes(l));
       if (change.proposedHours <= 0) {
         if (first) tables.jobPlanningLines.splice(tables.jobPlanningLines.indexOf(first), 1);
@@ -751,7 +770,8 @@ export class DemoBcServer {
 
   /** Move open requests along: picked up after a moment, done a few seconds later */
   private runAgent(): Promise<void> {
-    this.agentPass = this.agentPass.then(() => this.agentStep());
+    // A pass that failed mustn't fail every request after it
+    this.agentPass = this.agentPass.catch(() => undefined).then(() => this.agentStep());
     return this.agentPass;
   }
 
@@ -768,8 +788,14 @@ export class DemoBcServer {
       const age = now - (Date.parse(request.requestedAt ?? '') || now);
       const row = request as unknown as Row;
       if (age >= DEMO_AGENT_FINISH_MS) {
-        await finish(request);
-        row.status = 'Done';
+        try {
+          await finish(request);
+          row.status = 'Done';
+        } catch (error) {
+          // Reported on the request, as the real Poppie does; the other requests carry on
+          row.status = 'Failed';
+          row.errorMessage = error instanceof Error ? error.message : String(error);
+        }
         row.finishedAt = this.nowIso();
         row.startedAt ||= this.nowIso();
         changed = true;
@@ -851,8 +877,12 @@ export class DemoBcServer {
     }
     const lines = this.linesOf(sheet.number);
     const details = tables.timeSheetDetails.filter((d) => d.timeSheetNo === sheet.number);
-    const person = demoPerson(sheet.resourceNo);
-    const capacity = person ? (person.weeklyCapacity ?? person.workdays.length * 8) : 40;
+    // The person's weekly capacity as saved on their resource (Settings can change it)
+    const resource = tables.resources.find((r) => r.number === sheet.resourceNo);
+    const capacity = resource
+      ? resolveWeeklyCapacity(resource, buildUOMConversionMap(tables.resourceUnitsOfMeasure), 40)
+          .hours
+      : 40;
     const total = details.reduce((sum, d) => sum + d.quantity, 0);
     const notes: Array<Pick<BCTimesheetReviewLine, 'timeSheetLineNo' | 'severity' | 'note'>> = [];
     if (total < capacity) {

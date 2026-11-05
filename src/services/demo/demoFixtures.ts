@@ -33,10 +33,10 @@ import { DEMO_COMPANY_ID, DEMO_COMPANY_NAME, DEMO_USER } from './demoMode';
  * The demo's sample data: Contoso Ltd, a small fictional consultancy, with six people,
  * four fictional customers and their projects. Every name and amount here is invented.
  *
- * Dates are worked out from "today", so the demo never looks stale: twelve weeks of
- * timesheets up to this week (older weeks approved and posted, last week waiting for
- * approval), a plan from four weeks back to three weeks ahead, and Poppie's suggestions
- * and reviews for this week.
+ * Dates are worked out from "today", so the demo never looks stale: HISTORY_WEEKS weeks
+ * of timesheets before this one, plus this week (older weeks approved, and posted from
+ * three weeks back; last week waiting for approval), a plan from four weeks back to
+ * three weeks ahead, and Poppie's suggestions and reviews for this week.
  */
 
 /** Bump when the shape of DemoData changes, so a tab's saved demo is regenerated */
@@ -835,7 +835,7 @@ export function createDemoData(today: Date = new Date()): DemoData {
     );
   }
 
-  // --- Timesheets, twelve weeks up to this one ---
+  // --- Timesheets: HISTORY_WEEKS weeks before this one, plus this week ---
   const timeSheets: BCTimeSheet[] = [];
   const timeSheetLines: BCTimeSheetLine[] = [];
   const timeSheetDetails: BCTimeSheetDetail[] = [];

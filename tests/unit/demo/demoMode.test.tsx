@@ -81,6 +81,19 @@ describe('demo mode switch', () => {
     }
   });
 
+  it("can't start when session storage is readable but refuses writes", () => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('quota', 'QuotaExceededError');
+    });
+    try {
+      expect(canStartDemo()).toBe(false);
+      expect(enableDemoMode()).toBe(false);
+    } finally {
+      setItem.mockRestore();
+    }
+    expect(sessionStorage.length).toBe(0);
+  });
+
   it('reloads a page the browser brings back after the demo was left', () => {
     const reload = vi.fn();
     const restored = () => {

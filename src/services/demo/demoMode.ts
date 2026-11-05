@@ -61,9 +61,21 @@ function sessionStore(): Storage | null {
   }
 }
 
-/** Whether this browser lets the demo keep its flag (sessionStorage isn't blocked) */
+/**
+ * Whether this browser lets the demo keep its flag: sessionStorage is reachable and
+ * accepts a write (it can be readable yet full or refused).
+ */
 export function canStartDemo(): boolean {
-  return sessionStore() !== null;
+  const storage = sessionStore();
+  if (!storage) return false;
+  const probe = `${DEMO_STORAGE_PREFIX}_probe`;
+  try {
+    storage.setItem(probe, '1');
+    storage.removeItem(probe);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** True while this browser tab is in the demo */
