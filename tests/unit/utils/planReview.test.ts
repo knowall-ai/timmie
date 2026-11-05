@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { BCJobPlanningLine, BCPlanReview } from '@/types';
 import {
+  planChangedText,
   buildUOMConversionMap,
   canonicalPlanText,
   computePlanHash,
@@ -278,5 +279,23 @@ describe('planCellManualReason', () => {
     expect(planCellManualMessage('it has several lines')).toBe(
       'Edit this cell by hand: it has several lines.'
     );
+  });
+});
+
+describe('planChangedText', () => {
+  it("names the organisation's agent in BC's stale-plan refusal", () => {
+    expect(
+      planChangedText('The plan changed since Poppie looked. Ask her to re-review.', 'Contoso Bot')
+    ).toBe('The plan changed since Contoso Bot looked. Ask it to re-review.');
+  });
+
+  it('leaves every other message as it is', () => {
+    for (const message of [
+      "You don't have permission to change the plan.",
+      'Edit this cell by hand: its planning line is Billable.',
+      '',
+    ]) {
+      expect(planChangedText(message, 'Contoso Bot')).toBe(message);
+    }
   });
 });
