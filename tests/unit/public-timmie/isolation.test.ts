@@ -25,6 +25,8 @@ const ALLOWED_PACKAGES = [
   'next/link',
   '@heroicons/react/24/outline',
   'node:crypto',
+  // isIP, for Turnstile's optional remoteip.
+  'node:net',
   // The server's sideband WebSocket client. It sends auth headers, which the standard
   // WebSocket constructor cannot.
   'ws',

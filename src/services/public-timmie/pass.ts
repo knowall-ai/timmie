@@ -1,4 +1,5 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { isIP } from 'node:net';
 import { secretProblem } from './config';
 
 /**
@@ -114,18 +115,16 @@ export function verifyProofOfWork(
 
 // ---- Turnstile ------------------------------------------------------------
 
-/** A plain IPv4 or IPv6 address: not the IPv6 /64 key, nor 'unknown'. */
-const PLAIN_IP = /^(\d{1,3}(\.\d{1,3}){3}|[0-9a-f:]+)$/i;
-
 export async function verifyTurnstile(token: string, secret: string, ip: string) {
   if (!token || token.length > 2048) return false;
-  // `remoteip` is optional; it is only sent when `ip` is a real address.
+  // `remoteip` is optional; it is only sent when `ip` is a valid address (never the IPv6
+  // /64 key, 'unknown', or a malformed header value).
   const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
     method: 'POST',
     body: new URLSearchParams({
       secret,
       response: token,
-      ...(PLAIN_IP.test(ip) ? { remoteip: ip } : {}),
+      ...(isIP(ip) ? { remoteip: ip } : {}),
     }),
     cache: 'no-store',
     signal: AbortSignal.timeout(10_000),

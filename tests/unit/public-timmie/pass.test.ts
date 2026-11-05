@@ -51,9 +51,12 @@ describe('Turnstile', () => {
     expect(await verifyTurnstile('token', 'secret', '203.0.113.9')).toBe(true);
     expect(await verifyTurnstile('token', 'secret', '2001:db8:1:2::/64')).toBe(true);
     expect(await verifyTurnstile('token', 'secret', 'unknown')).toBe(true);
+    expect(await verifyTurnstile('token', 'secret', '999.999.999.999')).toBe(true);
+    expect(await verifyTurnstile('token', 'secret', 'deadbeef')).toBe(true);
+    expect(await verifyTurnstile('token', 'secret', '2001:db8::7')).toBe(true);
     expect(bodies[0]).toContain('remoteip=203.0.113.9');
-    expect(bodies[1]).not.toContain('remoteip');
-    expect(bodies[2]).not.toContain('remoteip');
+    for (const i of [1, 2, 3, 4]) expect(bodies[i], String(i)).not.toContain('remoteip');
+    expect(bodies[5]).toContain('remoteip=2001%3Adb8%3A%3A7');
   });
 });
 
