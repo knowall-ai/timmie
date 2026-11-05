@@ -61,6 +61,11 @@ function sessionStore(): Storage | null {
   }
 }
 
+/** Whether this browser lets the demo keep its flag (sessionStorage isn't blocked) */
+export function canStartDemo(): boolean {
+  return sessionStore() !== null;
+}
+
 /** True while this browser tab is in the demo */
 export function isDemoMode(): boolean {
   return sessionStore()?.getItem(DEMO_FLAG_KEY) === '1';
@@ -113,4 +118,19 @@ export function startDemo(path: string = DEMO_START_PATH): boolean {
 export function exitDemo(path = '/'): void {
   clearDemoState();
   window.location.assign(path);
+}
+
+/**
+ * "Sign in" and "Exit demo" clear the flag and leave the page. If the browser then
+ * brings that page back from its back-forward cache (the Back button), it still looks
+ * like the demo but would send its calls to the real Business Central. Load it afresh
+ * instead: a demo URL opens the demo again, with fresh sample data. Returns a function
+ * that stops watching.
+ */
+export function watchForStaleDemoPage(reload: () => void = () => window.location.reload()) {
+  const onPageShow = (event: PageTransitionEvent) => {
+    if (event.persisted && !isDemoMode()) reload();
+  };
+  window.addEventListener('pageshow', onPageShow);
+  return () => window.removeEventListener('pageshow', onPageShow);
 }

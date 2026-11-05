@@ -21,10 +21,12 @@ import {
   DEMO_ENVIRONMENT,
   DEMO_FLAG_KEY,
   DEMO_USER,
+  canStartDemo,
   clearDemoState,
   enableDemoMode,
   isDemoCompany,
   isDemoMode,
+  watchForStaleDemoPage,
 } from '@/services/demo/demoMode';
 import { appStorage } from '@/services/demo/demoStorage';
 import { resetDemoBcServer } from '@/services/demo/demoBcServer';
@@ -59,6 +61,48 @@ describe('demo mode switch', () => {
     expect(sessionStorage.getItem(DEMO_FLAG_KEY)).toBeNull();
     expect(sessionStorage.length).toBe(1);
     expect(sessionStorage.getItem('unrelated')).toBe('kept');
+  });
+
+  it("can't start when the browser blocks session storage", () => {
+    const original = Object.getOwnPropertyDescriptor(window, 'sessionStorage');
+    Object.defineProperty(window, 'sessionStorage', {
+      configurable: true,
+      get() {
+        throw new Error('blocked');
+      },
+    });
+    try {
+      expect(canStartDemo()).toBe(false);
+      expect(enableDemoMode()).toBe(false);
+      expect(isDemoMode()).toBe(false);
+    } finally {
+      if (original) Object.defineProperty(window, 'sessionStorage', original);
+      else delete (window as { sessionStorage?: Storage }).sessionStorage;
+    }
+  });
+
+  it('reloads a page the browser brings back after the demo was left', () => {
+    const reload = vi.fn();
+    const restored = () => {
+      const event = new Event('pageshow');
+      Object.defineProperty(event, 'persisted', { value: true });
+      window.dispatchEvent(event);
+    };
+    enableDemoMode();
+    const stop = watchForStaleDemoPage(reload);
+
+    // Still in the demo: nothing to do
+    restored();
+    expect(reload).not.toHaveBeenCalled();
+
+    // "Sign in" or "Exit demo" cleared the flag, then Back brought the page back
+    clearDemoState();
+    restored();
+    expect(reload).toHaveBeenCalledTimes(1);
+
+    stop();
+    restored();
+    expect(reload).toHaveBeenCalledTimes(1);
   });
 
   it('recognises the demo company in a link', () => {

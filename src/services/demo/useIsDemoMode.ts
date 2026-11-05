@@ -1,7 +1,7 @@
 'use client';
 
 import { useSyncExternalStore } from 'react';
-import { isDemoMode } from './demoMode';
+import { canStartDemo, isDemoMode } from './demoMode';
 
 const subscribe = () => () => {};
 
@@ -11,4 +11,9 @@ const subscribe = () => () => {};
  */
 export function useIsDemoMode(): boolean {
   return useSyncExternalStore(subscribe, isDemoMode, () => false);
+}
+
+/** Whether the demo can run in this browser (see canStartDemo); the server assumes it can */
+export function useCanStartDemo(): boolean {
+  return useSyncExternalStore(subscribe, canStartDemo, () => true);
 }
