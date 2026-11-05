@@ -46,7 +46,6 @@ export async function POST(request: Request) {
     turns = modelTurns(chat.messages);
     source = 'chat';
   }
-  if (turns.length === 0) return jsonError(400, 'Nothing to summarise yet.');
 
   const respond = (summary: string, how: string) => {
     logEvent({
@@ -60,7 +59,8 @@ export async function POST(request: Request) {
     return Response.json({ summary }, { headers: { 'Cache-Control': 'no-store' } });
   };
   const config = publicAzureConfig();
-  if (publicAiDisabled() || !config?.chatDeployment) {
+  // A call that ended before Timmie finished a reply has nothing for the model: the fallback.
+  if (turns.length === 0 || publicAiDisabled() || !config?.chatDeployment) {
     return respond(fallbackSummary(turns, source), 'fallback');
   }
   const busy = globalLimit(limiters.chatGlobal);

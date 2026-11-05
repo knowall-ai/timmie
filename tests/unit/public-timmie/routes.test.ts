@@ -514,5 +514,15 @@ describe('POST /api/public/summary (Send to the team)', () => {
       req('/api/public/summary', { ip, body: { call: 'nope' }, headers: passFor(ip) })
     );
     expect(unknown.status).toBe(404);
+    // Ended before Timmie finished a reply: still a usable summary, with no model call.
+    const quiet = registerCall(ip, () => undefined);
+    quiet.publish({ type: 'ended', reason: 'visitor' });
+    const fetchMock = azureReplies('unused');
+    const empty = await summarise(
+      req('/api/public/summary', { ip, body: { call: quiet.key }, headers: passFor(ip) })
+    );
+    expect(empty.status).toBe(200);
+    expect((await empty.json()).summary).toMatch(/talking to Timmie/);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

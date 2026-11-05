@@ -13,17 +13,18 @@ import { browserStore } from './storage';
  * page. The visitor checks and edits it there, adds their own name and email, and sends.
  */
 export function handOffToEnquiryForm(summary: string) {
+  const [path, hash] = ENQUIRY_PATH.split('#');
+  if (window.location.pathname === path) {
+    // The form is on this page: the event alone, so nothing is left in storage for later.
+    window.dispatchEvent(new CustomEvent<string>(ENQUIRY_PREFILL_EVENT, { detail: summary }));
+    window.location.hash = hash;
+    document.getElementById(hash)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
   try {
     browserStore('session')?.setItem(ENQUIRY_PREFILL_KEY, summary);
   } catch {
-    // Storage blocked: the event below still reaches a form on this page.
+    // Storage blocked: the form opens blank, which still works.
   }
-  window.dispatchEvent(new CustomEvent<string>(ENQUIRY_PREFILL_EVENT, { detail: summary }));
-  const [path, hash] = ENQUIRY_PATH.split('#');
-  if (window.location.pathname === path) {
-    window.location.hash = hash;
-    document.getElementById(hash)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  } else {
-    window.location.assign(ENQUIRY_PATH);
-  }
+  window.location.assign(ENQUIRY_PATH);
 }
