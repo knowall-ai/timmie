@@ -49,10 +49,11 @@ describe('bcClient retries', () => {
       );
       const unreachable = vi.fn();
       window.addEventListener(BC_UNREACHABLE_EVENT, unreachable);
-      const entries = bcClient.getTimeEntries('PR00010');
+      // getTimeEntries passes the failure on (only a 404 is "no entries"), so the project
+      // page can say its costs are incomplete rather than show them as zero
+      const failed = expect(bcClient.getTimeEntries('PR00010')).rejects.toThrow();
       await vi.advanceTimersByTimeAsync(90_000);
-      // getTimeEntries reports a failure as no entries
-      expect(await entries).toEqual([]);
+      await failed;
       expect(unreachable).toHaveBeenCalledTimes(1);
       window.removeEventListener(BC_UNREACHABLE_EVENT, unreachable);
     } finally {

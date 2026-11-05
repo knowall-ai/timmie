@@ -387,12 +387,12 @@ export function ProjectKPICards() {
   // only in LCY, so it uses BC's LCY price (the same as the project-currency one when the
   // project is in LCY). Masked by the Invoiced Price card's Eye toggle or Actual Cost's.
   const invoicedPriceLCY = analytics?.invoicedPriceLCY ?? 0;
-  const margin = invoicedPriceLCY - actualCost;
+  const rawMargin = invoicedPriceLCY - actualCost;
+  // Within a penny counts as break-even: zero (never "-£0.00"), neither green nor red
+  const margin = Math.abs(rawMargin) < 0.005 ? 0 : rawMargin;
   const marginPercent = invoicedPriceLCY !== 0 ? (margin / invoicedPriceLCY) * 100 : null;
   const marginText = `Margin ${formatCurrency(margin, currencyCode)}${marginPercent !== null ? ` · ${marginPercent.toFixed(1)}%` : ''}`;
-  // Within a penny counts as break-even, neither green nor red
-  const marginColor =
-    margin > 0.005 ? 'text-green-400' : margin < -0.005 ? 'text-red-400' : 'text-gray-400';
+  const marginColor = margin > 0 ? 'text-green-400' : margin < 0 ? 'text-red-400' : 'text-gray-400';
   const marginHidden = hiddenCards.has('Invoiced Price') || hiddenCards.has('Actual Cost');
   // The posted entries couldn't be read, so Actual Cost, Invoiced Price and the margin are
   // missing rather than zero (no fallback to Resource-only costs, which would be wrong)

@@ -116,6 +116,13 @@ describe('financial KPI cards', () => {
     expect(margin.textContent).not.toContain('%');
   });
 
+  it('shows a margin within a penny of zero as £0.00 in grey, never as -£0.00', () => {
+    // Floating-point sums can leave a margin a fraction of a penny below zero
+    setup({ invoicedPriceLCY: 1000, actualCost: 1000.001 });
+    const margin = card('Invoiced Price').getByText('Margin £0.00 · 0.0%');
+    expect(margin).toHaveClass('text-gray-400');
+  });
+
   it("warns on the cost and price cards, and drops the margin, when posted costs couldn't load", () => {
     setup({ invoicedPriceLCY: 4000, actualCost: 3000, costsIncomplete: true });
     for (const label of ['Actual Cost', 'Invoiced Price']) {

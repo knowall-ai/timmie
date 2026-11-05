@@ -1182,7 +1182,9 @@ class BusinessCentralClient {
   }
 
   // Time Entries - requires Timmie BC Extension v1.7.0+
-  // Provides posted time entries from Job Ledger Entry (actual cost and invoiced price)
+  // Provides posted time entries from Job Ledger Entry (actual cost and invoiced price).
+  // Nothing on an extension without the endpoint (404); any other failure throws, so the
+  // caller can say the costs are incomplete rather than show them as zero.
   async getTimeEntries(jobNumber: string): Promise<BCTimeEntry[]> {
     // Check if extension is installed
     const extensionInstalled = await this.isExtensionInstalled();
@@ -1199,14 +1201,14 @@ class BusinessCentralClient {
       );
     } catch (error) {
       // 404 means the endpoint doesn't exist (extension too old)
-      if (error instanceof Error && error.message.includes('404')) {
+      if (isEndpointMissing(error)) {
         console.warn(
           '[BC API] timeEntries endpoint not found. Upgrade Timmie BC Extension to v1.7.0+.'
         );
         return [];
       }
       console.error('[BC API] Error fetching time entries:', error);
-      return [];
+      throw error;
     }
   }
 
@@ -1225,6 +1227,10 @@ class BusinessCentralClient {
     const extensionInstalled = await this.isExtensionInstalled();
     if (!extensionInstalled || this._jobCostEntriesMissing) return null;
 
+    // The company and environment this request is for: a 404 that arrives after they've
+    // changed is about the old selection, so it mustn't be remembered for the new one
+    const requestCompanyId = this._companyId;
+    const requestEnvironment = this._environment;
     const filter = `jobNo eq '${this.sanitizeODataString(jobNumber)}'`;
     try {
       const entries = await this.customApiFetchAll<BCJobCostEntry>(
@@ -1233,9 +1239,11 @@ class BusinessCentralClient {
       // BC encodes "G/L Account" as "G_x002F_L_x0020_Account"
       return entries.map((entry) => ({ ...entry, type: decodeBCEnum(entry.type) }));
     } catch (error) {
-      if (error instanceof Error && error.message.startsWith('BC API Error (404)')) {
+      if (isEndpointMissing(error)) {
         // Expected until the extension is updated: use timeEntries, as before
-        this._jobCostEntriesMissing = true;
+        if (this._companyId === requestCompanyId && this._environment === requestEnvironment) {
+          this._jobCostEntriesMissing = true;
+        }
         return null;
       }
       throw error;

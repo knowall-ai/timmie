@@ -286,6 +286,19 @@ describe('project analytics from jobCostEntries', () => {
     error.mockRestore();
   });
 
+  it('marks the costs incomplete when the timeEntries fallback fails too', async () => {
+    client.getJobCostEntries.mockResolvedValue(null);
+    client.getTimeEntries.mockRejectedValue(new Error('BC API Error (500): Internal error'));
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const a = await projectDetailsService.getProjectAnalytics('PR00010');
+
+    expect(a.costsIncomplete).toBe(true);
+    expect(a.actualCost).toBe(0);
+    expect(a.hoursSpent).toBe(10);
+    error.mockRestore();
+  });
+
   it('falls back to timeEntries when jobCostEntries is missing (extension not updated)', async () => {
     client.getJobCostEntries.mockResolvedValue(null);
     client.getTimeEntries.mockResolvedValue([entry({})]);

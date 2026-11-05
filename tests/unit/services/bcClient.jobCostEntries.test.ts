@@ -63,6 +63,28 @@ describe('bcClient.getJobCostEntries', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("doesn't remember a 404 that arrives after the company has changed", async () => {
+    let answer404!: () => void;
+    const fetchMock = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          answer404 = () =>
+            resolve({ ok: false, status: 404, json: async () => ({}), text: async () => '' });
+        })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const stale = bcClient.getJobCostEntries('PR-CONTOSO');
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    // The user switches company while the old company's request is in flight
+    bcClient.setCompany('00000000-0000-0000-0000-0000000000c4', 'sandbox');
+    answer404();
+    await expect(stale).resolves.toBeNull();
+
+    // The new company is still asked for its own jobCostEntries
+    stubFetch(200, { value: [] });
+    await expect(bcClient.getJobCostEntries('PR-CONTOSO')).resolves.toEqual([]);
+  });
+
   it('throws on any other error (e.g. 500), rather than fall back to Resource-only costs', async () => {
     stubFetch(500, { error: { message: 'Internal error' } });
     await expect(bcClient.getJobCostEntries('PR-CONTOSO')).rejects.toThrow('(500)');

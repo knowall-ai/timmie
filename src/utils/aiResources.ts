@@ -9,6 +9,9 @@
 /** The default AI usage resource, when TIMMIE_AI_RESOURCES isn't set */
 export const DEFAULT_AI_RESOURCES = 'AI-USAGE';
 
+/** Longest wait for /api/config before the default applies, so a stalled request can't hold up hours */
+const CONFIG_TIMEOUT_MS = 5_000;
+
 // TIMMIE_AI_RESOURCES as the server has it, loaded at runtime from /api/config (see
 // loadAiResources), so changing the setting needs no rebuild. Undefined until loaded.
 let runtimeAiResources: string | undefined;
@@ -22,7 +25,10 @@ export function loadAiResources(fetcher: typeof fetch = fetch): Promise<void> {
   if (!loading) {
     loading = (async () => {
       try {
-        const response = await fetcher('/api/config', { cache: 'no-store' });
+        const response = await fetcher('/api/config', {
+          cache: 'no-store',
+          signal: AbortSignal.timeout(CONFIG_TIMEOUT_MS),
+        });
         if (!response.ok) return;
         const config = (await response.json()) as { aiResources?: unknown };
         if (typeof config.aiResources === 'string') runtimeAiResources = config.aiResources;

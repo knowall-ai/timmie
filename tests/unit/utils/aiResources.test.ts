@@ -102,6 +102,17 @@ describe('TIMMIE_AI_RESOURCES at runtime', () => {
     expect(isAiResource('AI-USAGE')).toBe(false);
   });
 
+  it('gives up on /api/config after a timeout, so a stalled request never holds up hours', async () => {
+    setAiResources(undefined);
+    const fetcher = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+      return Response.json({ aiResources: 'GPU-HOURS' });
+    });
+    await loadAiResources(fetcher as unknown as typeof fetch);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(isAiResource('GPU-HOURS')).toBe(true); // the request was made and used, with a signal
+  });
+
   it('keeps the default (AI-USAGE) when the server has none or /api/config fails', async () => {
     setAiResources(undefined);
     await loadAiResources(vi.fn(async () => Response.json({ aiResources: '' })));
