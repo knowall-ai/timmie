@@ -164,6 +164,32 @@ describe('PlanReview popover', () => {
     expect(dialog).toHaveTextContent('Thu 22 · PR00090 · Contoso Rollout · 7.17h → 7.25h');
   });
 
+  it("credits the week to its reviewer, even after the organisation's agent changed", () => {
+    renderChip(context([subject()]));
+    expect(openPopover()).toHaveAccessibleName(/^Poppie’s review · Week 43/);
+  });
+
+  it('uses a neutral heading, and names each reviewer, when reviewers differ', () => {
+    renderChip(
+      context([
+        subject(),
+        subject({
+          subjectNo: 'R0020',
+          name: 'Sam Contoso',
+          review: review({ entryNo: 2, reviewer: 'Contoso Bot' }),
+        }),
+      ])
+    );
+    const dialog = openPopover();
+    expect(dialog).toHaveAccessibleName(/^Plan review · Week 43/);
+    expect(
+      within(dialog).getByRole('button', { name: /^Alex Contoso: .*reviewed by Poppie\./ })
+    ).toHaveTextContent('by Poppie');
+    expect(
+      within(dialog).getByRole('button', { name: /^Sam Contoso: .*reviewed by Contoso Bot\./ })
+    ).toHaveTextContent('by Contoso Bot');
+  });
+
   it('hides Apply change and Ask Timmie without permission to change plans', () => {
     renderChip(context([subject()]));
     openPopover();

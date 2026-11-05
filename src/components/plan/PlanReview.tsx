@@ -374,8 +374,12 @@ function PlanReviewPopover({
     });
 
   const sorted = sortSubjects(subjects);
-  // The saved reviews are credited to whoever signed them, which may be a previous agent
-  const reviewer = sorted.find((s) => s.review)?.review?.reviewer;
+  // The saved reviews are credited to whoever signed them, which may be a previous agent. A
+  // week whose subjects were reviewed by different agents gets a neutral heading, and each
+  // subject says who reviewed it.
+  const reviewers = [...new Set(sorted.map((s) => s.review?.reviewer?.trim()).filter(Boolean))];
+  const reviewer = reviewers.length === 1 ? reviewers[0] : undefined;
+  const mixedReviewers = reviewers.length > 1;
   const weekEnd = format(parseISO(weekStart), 'd MMM');
 
   return createPortal(
@@ -396,7 +400,8 @@ function PlanReviewPopover({
         <div className="flex min-w-0 items-center gap-2">
           <AgentAvatar reviewer={reviewer} className="h-6 w-6" />
           <h3 id={titleId} className="truncate text-sm font-semibold text-white">
-            {reviewer?.trim() || agentName}&apos;s review · Week {weekNumber}
+            {mixedReviewers ? 'Plan review' : `${reviewer || agentName}’s review`} · Week{' '}
+            {weekNumber}
             <span className="text-dark-400 ml-1 text-xs font-normal">from {weekEnd}</span>
           </h3>
         </div>
@@ -422,6 +427,7 @@ function PlanReviewPopover({
             context={context}
             isExpanded={expanded.has(subject.subjectNo)}
             onToggle={() => toggle(subject.subjectNo)}
+            showReviewer={mixedReviewers}
           />
         ))}
       </ul>
@@ -435,15 +441,19 @@ function SubjectReview({
   context,
   isExpanded,
   onToggle,
+  showReviewer = false,
 }: {
   subject: PlanReviewSubjectWeek;
   context: PlanReviewContextValue;
   isExpanded: boolean;
   onToggle: () => void;
+  /** Say who reviewed this subject (when the week's subjects have different reviewers) */
+  showReviewer?: boolean;
 }) {
   const agentName = useAgentName();
 
   const { review } = subject;
+  const reviewerName = review?.reviewer?.trim() || agentName;
   const findingsId = useId();
   const lines = review ? sortPlanReviewLines(context.lines[review.entryNo] ?? []) : [];
   const verdict = review ? getPlanVerdictDisplay(review.verdict) : null;
@@ -458,9 +468,9 @@ function SubjectReview({
             onClick={onToggle}
             aria-expanded={isExpanded}
             aria-controls={isExpanded ? findingsId : undefined}
-            aria-label={`${subject.name}: ${verdict.label}${outOfDate ? ', out of date' : ''}. ${
-              isExpanded ? 'Hide' : 'Show'
-            } findings`}
+            aria-label={`${subject.name}: ${verdict.label}${outOfDate ? ', out of date' : ''}${
+              showReviewer ? `, reviewed by ${reviewerName}` : ''
+            }. ${isExpanded ? 'Hide' : 'Show'} findings`}
             className="focus-visible:ring-brand flex w-full items-center gap-1.5 rounded text-left focus:outline-none focus-visible:ring-2"
           >
             {isExpanded ? (
@@ -471,6 +481,9 @@ function SubjectReview({
             <span className="text-dark-100 min-w-0 flex-1 truncate text-xs font-medium">
               {subject.name}
             </span>
+            {showReviewer && (
+              <span className="text-dark-400 shrink-0 text-[10px]">by {reviewerName}</span>
+            )}
             <span
               className={cn(
                 'shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium',
@@ -482,7 +495,7 @@ function SubjectReview({
             {outOfDate && (
               <span
                 className="border-dark-500 text-dark-300 shrink-0 rounded-full border border-dashed px-1.5 py-0.5 text-[10px]"
-                title={`The plan changed after ${agentName}'s review`}
+                title={`The plan changed after ${reviewerName}'s review`}
               >
                 Out of date
               </span>
@@ -500,7 +513,7 @@ function SubjectReview({
               ) : (
                 <ul
                   className="space-y-1.5"
-                  aria-label={`${agentName}'s findings for ${subject.name}`}
+                  aria-label={`${reviewerName}'s findings for ${subject.name}`}
                 >
                   {lines.map((line) => (
                     <Finding

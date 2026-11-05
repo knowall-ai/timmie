@@ -72,7 +72,7 @@ az webapp config ssl bind \
 2. Click "New registration"
 3. Configure:
    - Name: `Timmie - Time Tracking`
-   - Supported account types: `Single tenant`
+   - Supported account types: `Accounts in any organizational directory (Any Microsoft Entra ID tenant - Multitenant)`, so each approved organisation signs in from its own tenant (the app signs people in through the `common` authority unless `NEXT_PUBLIC_AZURE_TENANT_ID` pins one tenant)
    - Redirect URI: `https://gettimm.ie` (SPA)
 
 === 2. Configure Authentication
@@ -105,7 +105,9 @@ Users with this app role can change an organisation's settings (see _Organisatio
    - Description: `Can change the organisation's Timmie settings`
 3. Tick "Do you want to enable this app role?" and apply
 
-Each organisation then assigns the role to its own people in _Enterprise applications_, as described under _Organisation settings_.
+Each organisation then assigns the role to its own people in _Enterprise applications_, as described under _Organisation settings_. Timmie appears there once someone in that organisation has signed in and consented (an administrator can consent for everyone at the sign-in prompt, or beforehand from the app's _Permissions_ page with an admin-consent link).
+
+Settings follow the tenant in the signed-in user's ID token (`tid`): someone signing in through their own organisation gets its settings, and a guest signing in to the KnowAll tenant gets KnowAll's.
 
 === 5. Create Client Secret (if needed for backend)
 
