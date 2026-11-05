@@ -100,13 +100,13 @@ To check what's currently deployed in each environment without the BC Admin Cent
 [source,bash]
 ----
 # What's on main (== currently in sandbox after the latest auto-deploy)
-git fetch origin && git show origin/main:app.json | grep version
+git fetch origin && git show origin/main:bc-extension/app.json | grep version
 
 # What's in production: read the most recent successful Deploy to Production
 # workflow run and inspect its commit SHA
 gh run list \
   --repo knowall-ai/timmie \
-  --workflow "Deploy to Production (KnowAll)" \
+  --workflow bc-deploy-production.yml \
   --status success \
   --limit 1 \
   --json headSha,createdAt,displayTitle
@@ -130,7 +130,7 @@ Historically, every production deploy on this repo has been triggered manually:
 
 . Verify the change is working in sandbox
 . Confirm `app.json` has been bumped beyond the currently-deployed production version
-. Open the *Actions* tab → *Deploy to Production (KnowAll)*
+. Open the *Actions* tab → *Deploy BC extension to Production (KnowAll)*
 . Click *Run workflow* against the `main` branch
 . Watch the run for success
 
@@ -179,22 +179,22 @@ Anyone with `write` access to the repository can trigger a production deploy —
 Specifically:
 
 * `main` branch protection: *not configured* (anyone with write can push directly)
-* GitHub `Production` environment: declared in the workflow, but the current GitHub Environment settings have no required reviewers or other protection rules configured
+* GitHub `bc-production` environment: declared in the workflow, but the current GitHub Environment settings have no required reviewers or other protection rules configured
 * Production deploys can be initiated by `workflow_dispatch` *or* `release: published`, both of which require only repo write access
 
 This means today, "approval to deploy to production" is informal: whoever clicks the button is the approver.
 
 === Recommended: Environment-gated approval
 
-The workflow at `.github/workflows/deploy-production.yml` already declares `environment: Production` (line 11). Adding required reviewers to that environment turns every production deploy into a two-person operation, with zero workflow changes.
+The workflow at `.github/workflows/bc-deploy-production.yml` already declares `environment: bc-production`. The extension has its own `bc-production` and `bc-sandbox` environments, separate from the web app's `production`, so the BC credentials and tag rules don't mix with the web app's. Adding required reviewers to that environment turns every production deploy into a two-person operation, with zero workflow changes.
 
 ==== One-time setup
 
-. Open *Settings → Environments → Production* in the GitHub UI: \
+. Open *Settings → Environments → bc-production* in the GitHub UI: \
   `https://github.com/knowall-ai/timmie/settings/environments/`
 . Tick *Required reviewers* and add one or two trusted users
 . Optional: tick *Wait timer* and set 5–10 minutes to provide an abort window
-. Optional: under *Deployment branches and tags*, restrict to `v*.*.*.*` tag patterns so only properly tagged releases can deploy
+. Optional: under *Deployment branches and tags*, restrict to the `bc-v*` tag pattern, plus `main` if you want manual runs so only properly tagged releases can deploy
 . Click *Save protection rules*
 
 ==== Approval flow once enabled

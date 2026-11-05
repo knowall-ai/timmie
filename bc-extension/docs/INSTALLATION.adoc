@@ -82,12 +82,12 @@ See https://learn.microsoft.com/en-us/dynamics365/business-central/dev-itpro/adm
 In your GitHub repository settings:
 
 1. Go to *Settings* → *Environments*
-2. Create environment: `Sandbox`
+2. Create environment: `bc-sandbox` (and `bc-production` for production deploys)
 3. Add secrets:
    * `BC_TENANT_ID` - Your Azure AD tenant ID
    * `BC_CLIENT_ID` - App registration client ID
    * `BC_CLIENT_SECRET` - App registration client secret
-4. Repeat for `Production` environment if needed
+4. Repeat for `bc-production`
 
 === Step 6: Trigger Deployment
 

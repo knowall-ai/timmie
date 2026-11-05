@@ -10,7 +10,7 @@ jobs:
     # Web releases are tagged v*, BC extension releases bc-v*. Only deploy the extension for its own.
     if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'bc-v')
     runs-on: windows-latest
-    environment: Production
+    environment: bc-production
 
     steps:
       - name: Checkout

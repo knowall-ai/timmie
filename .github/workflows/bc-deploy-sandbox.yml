@@ -10,7 +10,7 @@ on:
 jobs:
   deploy:
     runs-on: windows-latest
-    environment: Sandbox
+    environment: bc-sandbox
 
     steps:
       - name: Checkout
