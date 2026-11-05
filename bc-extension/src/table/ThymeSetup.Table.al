@@ -25,6 +25,13 @@ table 50103 "Thyme Setup"
             MinValue = 0;
             MaxValue = 100;
             InitValue = 75;
+
+            // MinValue/MaxValue aren't enforced through API pages, so check explicitly
+            trigger OnValidate()
+            begin
+                if (Rec."Default Billable Target %" < 0) or (Rec."Default Billable Target %" > 100) then
+                    Error(BillableTargetRangeErr);
+            end;
         }
     }
 
@@ -47,4 +54,7 @@ table 50103 "Thyme Setup"
             Rec.Insert(true);
         end;
     end;
+
+    var
+        BillableTargetRangeErr: Label 'The default billable target must be between 0 and 100 percent.';
 }
