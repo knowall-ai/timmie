@@ -105,11 +105,20 @@ the agent's name and whether it is online.
 The setting is also the hosted worker's switch. The worker's tenant registry reads `OrgSettings`,
 and it schedules sweeps and claims requests only for organisations set to *Timmie*. When an admin
 switches to *Your own agent* or *None*, the worker stops claiming that organisation's requests
-and drops its sweeps from the next tick, finishes any job already running (a job is one request
-or one sweep, minutes at most), and stops its heartbeat, so the custom agent never competes with
-it. A request the worker was holding when it stopped is left Running and reclaimed by the new
-agent after 30 minutes, like any stale request. Switching back to *Timmie* needs nothing more
-than the setting, as long as the consent and BC app user are still in place.
+and drops its sweeps from the next tick, and stops its heartbeat. A running request is finished.
+A running sweep checks the setting between subjects (one person's or project's week, one day's
+suggestions) and stops at the next one, so it ends within a minute or two.
+
+*Handover.* Two agents must not work one organisation at once, and a switch can't stop the
+outgoing agent instantly, so the rule is: the incoming agent claims no request and runs no sweep
+for an organisation until every other agent's heartbeat there is stale (5 minutes without one,
+the same test the web app uses for "online"). The shared core in `agent/` enforces this for the
+worker, the skill pack and the MCP server alike, so it holds in both directions: a custom agent
+starting up waits for the worker to go quiet, and the worker, when switched back on, waits for
+the custom agent to stop beating. A request the outgoing agent was holding when it stopped is
+left Running and reclaimed by the new agent after 30 minutes, like any stale request. Switching
+back to *Timmie* needs nothing more than the setting, as long as the consent and BC app user are
+still in place.
 
 == The contract: the Timmie BC Extension API
 
@@ -345,15 +354,19 @@ per month, and the agent is included.
   covered.
 * *Not enough credit:* the charge is taken anyway, so the balance can go below zero for a grace
   period. If it isn't topped up by then, the organisation is *suspended*, whichever agent it
-  uses: the web app's server checks the balance on sign-in (the same place it meters active
-  users) and shows everyone a "suspended" page, with *Settings > Billing* still open to admins
-  so they can top up. Hosted Timmie also skips the tenant and sets its heartbeat status to
-  "Unavailable: subscription inactive" (see _Finding work_). No further monthly charge is taken
-  while suspended, so the debt is never more than the one unpaid month. Data in BC is untouched
-  throughout.
+  uses: the web app's server reports the organisation's standing with its settings, which the
+  app loads on sign-in (the same place it meters active users), on every page load and at least
+  every 15 minutes while a session is open. So a suspension reaches people already signed in
+  within 15 minutes, not only at their next sign-in. Suspended, the app shows everyone a
+  "suspended" page, with *Settings > Billing* still open to admins so they can top up. Hosted
+  Timmie also skips the tenant and sets its heartbeat status to "Unavailable: subscription
+  inactive" (see _Finding work_). No monthly charge is taken while the balance is below zero,
+  in the grace period or suspended, so the debt is never more than the one unpaid month however
+  long the grace period is. Data in BC is untouched throughout.
 * *Coming back:* the organisation is reactivated when the balance is back above zero, not on
   any payment. A top-up smaller than the debt reduces it, and the page says how much more is
-  needed. The next monthly charge then runs as normal.
+  needed. The next monthly charge then runs as normal; the months spent below zero are not
+  charged for afterwards.
 * *Auto top-up (later):* the admin connects a wallet with Nostr Wallet Connect and a spending
   limit, and the balance is topped up automatically when it runs low.
 * *Fiat (later):* a Microsoft marketplace (transactable SaaS) listing could add card or invoice
@@ -368,6 +381,8 @@ per month, and the agent is included.
 * Whether the BC extension should create the agent's app user itself from a setup page, which
   removes the fiddliest onboarding step.
 * How long the grace period is.
+* Whether suspension should lock the web app for everyone but billing admins, as above, or only
+  show a banner and stop the agent.
 * Whether credit is held in sats only, or the price is fixed in fiat and converted at top-up.
 * Trial terms: how long, and whether the agent is in the trial.
 * Whether an active user is anyone who signed in that month (as above) or anyone with a time sheet
