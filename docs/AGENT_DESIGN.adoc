@@ -102,6 +102,15 @@ Entra tenant in the `OrgSettings` table and only `Timmie.Admin` users can change
 The web app doesn't care which one is in use. It only reads and writes Business Central, and shows
 the agent's name and whether it is online.
 
+The setting is also the hosted worker's switch. The worker's tenant registry reads `OrgSettings`,
+and it schedules sweeps and claims requests only for organisations set to *Timmie*. When an admin
+switches to *Your own agent* or *None*, the worker stops claiming that organisation's requests
+and drops its sweeps from the next tick, finishes any job already running (a job is one request
+or one sweep, minutes at most), and stops its heartbeat, so the custom agent never competes with
+it. A request the worker was holding when it stopped is left Running and reclaimed by the new
+agent after 30 minutes, like any stale request. Switching back to *Timmie* needs nothing more
+than the setting, as long as the consent and BC app user are still in place.
+
 == The contract: the Timmie BC Extension API
 
 The Business Central API is the *only* interface between the web app and any agent, hosted Timmie
@@ -203,18 +212,20 @@ or email. That makes it much simpler than Poppie: a queue worker, not an agent p
   Application permissions: Business Central `API.ReadWrite.All`, and Graph `Calendars.Read` plus
   `OnlineMeetings.Read.All` and `OnlineMeetingArtifact.Read.All` to measure real meeting length
   from attendance reports.
-* Admin consent is not enough for the meeting calls. Graph also wants the app in the tenant's
-  Teams *application access policy* (`Set-CsApplicationAccessPolicy`), or they return 403.
-  Without it Timmie still suggests from the calendar, with the booked length rather than the
-  attended one.
+* Admin consent is not enough for the meeting calls. Graph also wants the app in a Teams
+  *application access policy* (`Set-CsApplicationAccessPolicy` adds it), and that policy granted
+  to the people whose meetings it reads, or to everyone (`Grant-CsApplicationAccessPolicy`, with
+  `-Global` for the whole tenant). Adding the app to a policy nobody is granted still gets a
+  403 error. Without this Timmie still suggests from the calendar, with the booked length
+  rather than the attended one.
 * A customer admin onboards from *Settings > AI Agent > Timmie*:
   . Click *Grant consent*: the standard Entra admin consent link for the Timmie Agent app.
   . In BC, add the app under *Microsoft Entra Applications* and assign `D365 READ` and
     `THYME AI AGENT`. Ideally the extension does this from a setup page, so it is one click.
   . Choose the environments and companies Timmie should work in.
   . The page waits for the first heartbeat and shows a green tick per company.
-  . Optional: add Timmie Agent to the Teams application access policy, for attended meeting
-    lengths.
+  . Optional: add Timmie Agent to a Teams application access policy and grant it, for attended
+    meeting lengths.
 * Each step is checked and reported on the page, so the admin can see exactly what's missing
   instead of a silent offline agent. The calendar check and the meeting-length check are separate
   steps, so calendars can't show green while attendance reads fail.
@@ -333,10 +344,16 @@ per month, and the agent is included.
   billing contacts are emailed when it covers less than a month, and again when a charge can't be
   covered.
 * *Not enough credit:* the charge is taken anyway, so the balance can go below zero for a grace
-  period. If it isn't topped up by then, the worker skips the tenant and sets its heartbeat
-  status to "Unavailable: subscription inactive", which the web app shows as unavailable with
-  the request buttons disabled (see _Finding work_). The next top-up clears the debt and turns
-  the agent back on. Data in BC is untouched throughout.
+  period. If it isn't topped up by then, the organisation is *suspended*, whichever agent it
+  uses: the web app's server checks the balance on sign-in (the same place it meters active
+  users) and shows everyone a "suspended" page, with *Settings > Billing* still open to admins
+  so they can top up. Hosted Timmie also skips the tenant and sets its heartbeat status to
+  "Unavailable: subscription inactive" (see _Finding work_). No further monthly charge is taken
+  while suspended, so the debt is never more than the one unpaid month. Data in BC is untouched
+  throughout.
+* *Coming back:* the organisation is reactivated when the balance is back above zero, not on
+  any payment. A top-up smaller than the debt reduces it, and the page says how much more is
+  needed. The next monthly charge then runs as normal.
 * *Auto top-up (later):* the admin connects a wallet with Nostr Wallet Connect and a spending
   limit, and the balance is topped up automatically when it runs low.
 * *Fiat (later):* a Microsoft marketplace (transactable SaaS) listing could add card or invoice
@@ -350,7 +367,7 @@ per month, and the agent is included.
   Depends on how cheap idle is versus start-up time for a review.
 * Whether the BC extension should create the agent's app user itself from a setup page, which
   removes the fiddliest onboarding step.
-* How long the grace period is, and how far below zero a balance may go.
+* How long the grace period is.
 * Whether credit is held in sats only, or the price is fixed in fiat and converted at top-up.
 * Trial terms: how long, and whether the agent is in the trial.
 * Whether an active user is anyone who signed in that month (as above) or anyone with a time sheet
