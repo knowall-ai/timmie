@@ -404,10 +404,12 @@ export const projectDetailsService = {
       teamBreakdown: [],
     });
 
-    // Check if extension is installed
+    // Check if extension is installed. Without it (or when the check itself fails, which also
+    // reads as not installed) the posted entries haven't been read, so the costs are
+    // incomplete, not zero
     const extensionInstalled = await bcClient.isExtensionInstalled();
     if (!extensionInstalled) {
-      return emptyAnalytics();
+      return { ...emptyAnalytics(), costsIncomplete: true };
     }
 
     // No date window: the project's totals cover all its time, however old (a 6-month

@@ -272,6 +272,16 @@ describe('project analytics from jobCostEntries', () => {
     expect(a.unpostedBillable).toBe(200);
   });
 
+  it('marks the costs incomplete when the extension check fails (reads as not installed)', async () => {
+    client.isExtensionInstalled.mockResolvedValueOnce(false);
+
+    const a = await projectDetailsService.getProjectAnalytics('PR00010');
+
+    expect(a.costsIncomplete).toBe(true);
+    expect(a.actualCost).toBe(0);
+    expect(client.getJobCostEntries).not.toHaveBeenCalled();
+  });
+
   it('marks the costs incomplete, without falling back, when jobCostEntries fails (500)', async () => {
     client.getJobCostEntries.mockRejectedValue(new Error('BC API Error (500): Internal error'));
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
