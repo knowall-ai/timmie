@@ -16,7 +16,7 @@ import { clearProfilePhotoCache } from './graphService';
 import { clearResourceIdentityCache } from './resourceIdentity';
 import { clearReviewerPhotoCache } from './reviewerIdentity';
 import { resetGraphConsentState } from './tokenService';
-import { DEMO_ACCOUNT, clearDemoState, exitDemo } from '../demo/demoMode';
+import { DEMO_ACCOUNT, clearDemoState, exitDemo, watchForStaleDemoPage } from '../demo/demoMode';
 import { useIsDemoMode } from '../demo/useIsDemoMode';
 
 interface AuthProviderProps {
@@ -30,6 +30,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     initializeMsal().then(() => {
       setIsInitialized(true);
     });
+    // Back must not bring back a page that was loaded in the other mode (or another demo)
+    return watchForStaleDemoPage();
   }, []);
 
   if (!isInitialized) {

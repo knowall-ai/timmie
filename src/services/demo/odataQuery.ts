@@ -23,6 +23,8 @@ type Token =
   | { type: 'close' };
 
 const COMPARISONS: readonly string[] = ['eq', 'ne', 'gt', 'ge', 'lt', 'le'];
+/** The most rows one request may ask for: Business Central's own maximum page size */
+export const MAX_TOP = 20_000;
 // A bare date or date-time literal, e.g. 2026-10-19 or 2026-10-19T09:00:00Z
 const DATE_LITERAL = /^\d{4}-\d{2}-\d{2}(T[\d:.]+(Z|[+-]\d{2}:\d{2})?)?$/;
 
@@ -228,9 +230,10 @@ export function queryRows<T extends Row>(rows: T[], params: URLSearchParams): T[
   result = orderRows(result, params.get('$orderby'));
   const top = params.get('$top');
   if (top !== null) {
-    // Decimal digits only: not '', '0x10' or '1e2'
-    if (!/^\d+$/.test(top)) throw new ODataQueryError('Invalid $top');
-    result = result.slice(0, Number.parseInt(top, 10));
+    // Decimal digits only (not '', '0x10' or '1e2'), and no more than BC's own page limit
+    const count = /^\d+$/.test(top) ? Number.parseInt(top, 10) : NaN;
+    if (!Number.isSafeInteger(count) || count > MAX_TOP) throw new ODataQueryError('Invalid $top');
+    result = result.slice(0, count);
   }
   return result;
 }

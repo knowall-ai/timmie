@@ -19,7 +19,10 @@ import type { BCEnvironmentType } from '@/types';
 
 /** Every sessionStorage key the demo writes starts with this, so exiting clears them all */
 export const DEMO_STORAGE_PREFIX = 'timmie_demo';
-/** The flag: present ('1') while this tab is in the demo */
+/**
+ * The flag: present while this tab is in the demo. Its value is the demo's generation,
+ * new on every start, so a page from an earlier demo can be told from this one.
+ */
 export const DEMO_FLAG_KEY = `${DEMO_STORAGE_PREFIX}_active`;
 
 /** The demo company. BC never issues this SystemId, so it can't name a real company. */
@@ -78,9 +81,14 @@ export function canStartDemo(): boolean {
   }
 }
 
+/** This tab's demo generation, or null outside the demo */
+function demoGeneration(): string | null {
+  return sessionStore()?.getItem(DEMO_FLAG_KEY) || null;
+}
+
 /** True while this browser tab is in the demo */
 export function isDemoMode(): boolean {
-  return sessionStore()?.getItem(DEMO_FLAG_KEY) === '1';
+  return demoGeneration() !== null;
 }
 
 /** Whether a URL company is the demo company (a shared demo link) */
@@ -109,7 +117,10 @@ export function enableDemoMode(): boolean {
   if (!storage) return false;
   clearDemoState();
   try {
-    storage.setItem(DEMO_FLAG_KEY, '1');
+    storage.setItem(
+      DEMO_FLAG_KEY,
+      `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+    );
   } catch {
     return false;
   }
@@ -133,15 +144,18 @@ export function exitDemo(path = '/'): void {
 }
 
 /**
- * "Sign in" and "Exit demo" clear the flag and leave the page. If the browser then
- * brings that page back from its back-forward cache (the Back button), it still looks
- * like the demo but would send its calls to the real Business Central. Load it afresh
- * instead: a demo URL opens the demo again, with fresh sample data. Returns a function
- * that stops watching.
+ * Every page is loaded in one mode: the demo (one generation of it) or not. "Try the
+ * demo", "Sign in" and "Exit demo" change the mode and leave the page. If the browser
+ * then brings that page back from its back-forward cache (the Back button), its modules
+ * are still in the old mode while the flag says otherwise: a demo page would call the
+ * real Business Central, a real page would keep its settings in localStorage, an older
+ * demo could write its data over this one. Load such a page afresh instead. Returns a
+ * function that stops watching.
  */
 export function watchForStaleDemoPage(reload: () => void = () => window.location.reload()) {
+  const loadedAs = demoGeneration();
   const onPageShow = (event: PageTransitionEvent) => {
-    if (event.persisted && !isDemoMode()) reload();
+    if (event.persisted && demoGeneration() !== loadedAs) reload();
   };
   window.addEventListener('pageshow', onPageShow);
   return () => window.removeEventListener('pageshow', onPageShow);

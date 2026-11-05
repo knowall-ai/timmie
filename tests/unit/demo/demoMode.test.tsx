@@ -118,6 +118,34 @@ describe('demo mode switch', () => {
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
+  it('reloads a page loaded outside the demo, or in an earlier demo, when brought back', () => {
+    const restored = () => {
+      const event = new Event('pageshow');
+      Object.defineProperty(event, 'persisted', { value: true });
+      window.dispatchEvent(event);
+    };
+    // A real page, then "Try the demo" in the same tab, then Back
+    const realReload = vi.fn();
+    const stopReal = watchForStaleDemoPage(realReload);
+    restored();
+    expect(realReload).not.toHaveBeenCalled();
+    enableDemoMode();
+    restored();
+    expect(realReload).toHaveBeenCalledTimes(1);
+    stopReal();
+
+    // Demo A's page, then exit and start demo B, then Back to A
+    const demoReload = vi.fn();
+    const stopDemo = watchForStaleDemoPage(demoReload);
+    restored();
+    expect(demoReload).not.toHaveBeenCalled();
+    clearDemoState();
+    enableDemoMode();
+    restored();
+    expect(demoReload).toHaveBeenCalledTimes(1);
+    stopDemo();
+  });
+
   it('recognises the demo company in a link', () => {
     expect(isDemoCompany(DEMO_COMPANY_ID.toUpperCase())).toBe(true);
     expect(isDemoCompany('00000000-0000-0000-0000-000000000001')).toBe(false);

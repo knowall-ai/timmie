@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { filterRows, ODataQueryError, orderRows, queryRows } from '@/services/demo/odataQuery';
+import {
+  filterRows,
+  MAX_TOP,
+  ODataQueryError,
+  orderRows,
+  queryRows,
+} from '@/services/demo/odataQuery';
 
 const rows = [
   { no: 'A', date: '2026-10-19', hours: 8, type: 'Job', submitted: true, name: "O'Brien" },
@@ -53,7 +59,8 @@ describe('demo OData filters', () => {
     const top = (value: string) => queryRows(rows, new URLSearchParams({ $top: value }));
     expect(top('2')).toHaveLength(2);
     expect(top('0')).toHaveLength(0);
-    for (const bad of ['', ' ', '0x10', '1e2', '-1', '1.5']) {
+    expect(top(String(MAX_TOP))).toHaveLength(3);
+    for (const bad of ['', ' ', '0x10', '1e2', '-1', '1.5', String(MAX_TOP + 1), '9'.repeat(400)]) {
       expect(() => top(bad)).toThrow(ODataQueryError);
     }
   });

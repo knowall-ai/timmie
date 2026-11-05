@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { BeakerIcon } from '@heroicons/react/24/outline';
 import { Button } from '@/components/ui';
 import { useAuth } from '@/services/auth';
-import { exitDemo, watchForStaleDemoPage } from '@/services/demo/demoMode';
+import { exitDemo } from '@/services/demo/demoMode';
 import { useIsDemoMode } from '@/services/demo/useIsDemoMode';
 
 /** Links into Business Central itself, which the demo company doesn't exist in */
@@ -39,12 +39,9 @@ export function DemoBanner() {
     // auxclick: a middle-click opening the link in a new tab
     document.addEventListener('click', onClick, true);
     document.addEventListener('auxclick', onClick, true);
-    // Back after "Sign in" or "Exit demo" must not show this page outside the demo
-    const stopWatching = watchForStaleDemoPage();
     return () => {
       document.removeEventListener('click', onClick, true);
       document.removeEventListener('auxclick', onClick, true);
-      stopWatching();
     };
   }, [isDemo]);
 
