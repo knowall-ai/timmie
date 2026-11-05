@@ -743,7 +743,7 @@ See [docs/INSTALLATION.adoc](docs/INSTALLATION.adoc) for detailed setup instruct
 ## Project Structure
 
 ```
-thyme-bc-extension/
+bc-extension/
 ├── app.json                                    # Extension manifest
 ├── src/
 │   ├── api/

@@ -404,7 +404,7 @@ class BusinessCentralClient {
   /**
    * Check if the Timmie BC Extension is installed.
    * The extension provides additional API endpoints with customer and task data.
-   * @see https://github.com/knowall-ai/timmie-bc-extension
+   * @see https://github.com/knowall-ai/timmie/tree/main/bc-extension
    */
   async isExtensionInstalled(): Promise<boolean> {
     // Return cached result if available

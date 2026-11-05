@@ -3,8 +3,8 @@
 **KnowAll AI Technical Support:**
 
 * General support: support@knowall.ai
-* Repository: https://github.com/knowall-ai/thyme-bc-extension
-* Issue tracker: https://github.com/knowall-ai/thyme-bc-extension/issues
+* Repository: https://github.com/knowall-ai/timmie/tree/main/bc-extension
+* Issue tracker: https://github.com/knowall-ai/timmie/issues
 
 **Related Projects:**
 

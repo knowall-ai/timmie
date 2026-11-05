@@ -29,7 +29,7 @@ In scope:
 
 - [gettimm.ie](https://gettimm.ie) and [timmie.knowall.ai](https://timmie.knowall.ai)
 - The code in this repository
-- The [Timmie BC Extension](https://github.com/knowall-ai/timmie-bc-extension)
+- The [Timmie BC Extension](https://github.com/knowall-ai/timmie/tree/main/bc-extension)
 
 Out of scope:
 

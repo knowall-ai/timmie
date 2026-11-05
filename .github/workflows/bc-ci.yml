@@ -1,8 +1,11 @@
-name: CI
+name: BC extension CI
 
 on:
   pull_request:
     branches: [main]
+    paths:
+      - 'bc-extension/**'
+      - '.github/workflows/bc-*.yml'
   workflow_dispatch:
 
 concurrency:
@@ -46,6 +49,7 @@ jobs:
         run: |
           Import-Module BcContainerHelper
 
+          $project        = Join-Path $env:GITHUB_WORKSPACE "bc-extension"
           $artifactUrl    = '${{ steps.resolve_artifact.outputs.artifact_url }}'
           $compilerFolder = New-BcCompilerFolder -artifactUrl $artifactUrl -cacheFolder "c:\bccompiler"
           Write-Host "Compiler folder: $compilerFolder"
@@ -72,11 +76,11 @@ jobs:
           $outputFolder  = Join-Path $env:GITHUB_WORKSPACE "output"
           New-Item -ItemType Directory -Path $outputFolder -Force | Out-Null
 
-          $appJson      = Get-Content (Join-Path $env:GITHUB_WORKSPACE "app.json") | ConvertFrom-Json
+          $appJson      = Get-Content (Join-Path $project "app.json") | ConvertFrom-Json
           $appFileName  = "$($appJson.publisher)_$($appJson.name)_$($appJson.version).app"
           $appFilePath  = Join-Path $outputFolder $appFileName
 
-          & $alcExe /project:$env:GITHUB_WORKSPACE /packagecachepath:$symbolsFolder /out:$appFilePath /assemblyprobingpaths:$compilerFolder
+          & $alcExe /project:$project /packagecachepath:$symbolsFolder /out:$appFilePath /assemblyprobingpaths:$compilerFolder
 
           if (-not (Test-Path $appFilePath)) {
             throw "Compilation failed - no .app file produced"
@@ -87,6 +91,6 @@ jobs:
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: thyme-bc-extension-pr-build
+          name: timmie-bc-extension-pr-build
           path: 'output/*.app'
           if-no-files-found: error

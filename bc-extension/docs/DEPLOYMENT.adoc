@@ -105,7 +105,7 @@ git fetch origin && git show origin/main:app.json | grep version
 # What's in production: read the most recent successful Deploy to Production
 # workflow run and inspect its commit SHA
 gh run list \
-  --repo knowall-ai/thyme-bc-extension \
+  --repo knowall-ai/timmie \
   --workflow "Deploy to Production (KnowAll)" \
   --status success \
   --limit 1 \
@@ -156,16 +156,18 @@ To promote `main` to production:
 # Confirm app.json has the version you want to ship (e.g. 1.9.3.0)
 git fetch origin
 git checkout main && git pull
-cat app.json | grep version
+grep version bc-extension/app.json
 
 # Create and publish the release in one command
-gh release create v1.9.3.0 \
+gh release create bc-v1.9.3.0 \
   --target main \
-  --title "v1.9.3.0" \
+  --title "bc-v1.9.3.0" \
   --generate-notes
 ----
 
 The `release: published` event fires immediately on publish, deploying the tagged commit to the KnowAll production tenant.
+
+The extension lives in the `timmie` repo with the web app, so its releases are tagged `bc-v*`. Web app releases are tagged `v*`. The production workflow skips any release whose tag doesn't start with `bc-v`, so publishing a web release never deploys the extension.
 
 [[production-approval]]
 == Production approval & access
@@ -189,7 +191,7 @@ The workflow at `.github/workflows/deploy-production.yml` already declares `envi
 ==== One-time setup
 
 . Open *Settings → Environments → Production* in the GitHub UI: \
-  `https://github.com/knowall-ai/thyme-bc-extension/settings/environments/`
+  `https://github.com/knowall-ai/timmie/settings/environments/`
 . Tick *Required reviewers* and add one or two trusted users
 . Optional: tick *Wait timer* and set 5–10 minutes to provide an abort window
 . Optional: under *Deployment branches and tags*, restrict to `v*.*.*.*` tag patterns so only properly tagged releases can deploy
@@ -197,10 +199,10 @@ The workflow at `.github/workflows/deploy-production.yml` already declares `envi
 
 ==== Approval flow once enabled
 
-. A release is published (`gh release create v1.9.3.0 --target main --generate-notes`) or someone runs `workflow_dispatch`
+. A release is published (`gh release create bc-v1.9.3.0 --target main --generate-notes`) or someone runs `workflow_dispatch`
 . The workflow run starts but the `deploy` job pauses immediately, *before* any steps run
 . Reviewers receive an email from GitHub and a notification at `https://github.com/notifications`
-. The reviewer opens the run page, e.g. `https://github.com/knowall-ai/thyme-bc-extension/actions/runs/{run_id}`
+. The reviewer opens the run page, e.g. `https://github.com/knowall-ai/timmie/actions/runs/{run_id}`
 . A yellow banner appears at the top of the page: *Waiting for review* with a *Review deployments* button
 . Clicking *Review deployments* opens a modal containing:
   ** A checkbox for the `Production` environment
@@ -215,7 +217,7 @@ That modal is the approval UI. GitHub does not provide a separate dashboard for 
 
 Environment-gated approval guards production. Branch protection guards what reaches sandbox in the first place. Recommended baseline:
 
-. Open `https://github.com/knowall-ai/thyme-bc-extension/settings/branches`
+. Open `https://github.com/knowall-ai/timmie/settings/branches`
 . Add a rule for branch name pattern `main`
 . Tick *Require a pull request before merging* (optionally with required approvals)
 . Optional: *Require status checks to pass before merging*

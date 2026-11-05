@@ -1,4 +1,4 @@
-name: Deploy to Production (KnowAll)
+name: Deploy BC extension to Production (KnowAll)
 
 on:
   release:
@@ -7,6 +7,8 @@ on:
 
 jobs:
   deploy:
+    # Web releases are tagged v*, BC extension releases bc-v*. Only deploy the extension for its own.
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'bc-v')
     runs-on: windows-latest
     environment: Production
 
@@ -27,6 +29,7 @@ jobs:
           BC_CLIENT_ID: ${{ secrets.BC_CLIENT_ID }}
           BC_CLIENT_SECRET: ${{ secrets.BC_CLIENT_SECRET }}
         run: |
+          $project = Join-Path $env:GITHUB_WORKSPACE "bc-extension"
           $secureSecret = ConvertTo-SecureString $env:BC_CLIENT_SECRET -AsPlainText -Force
 
           $authContext = New-BcAuthContext `
@@ -66,12 +69,12 @@ jobs:
 
           # Compile the app
           Write-Host "Compiling app..."
-          $appJsonPath = Join-Path $env:GITHUB_WORKSPACE "app.json"
+          $appJsonPath = Join-Path $project "app.json"
           $appJson = Get-Content $appJsonPath | ConvertFrom-Json
           $appFileName = "$($appJson.publisher)_$($appJson.name)_$($appJson.version).app"
           $appFilePath = Join-Path $outputFolder $appFileName
 
-          & $alcExe /project:$env:GITHUB_WORKSPACE /packagecachepath:$symbolsFolder /out:$appFilePath /assemblyprobingpaths:$compilerFolder
+          & $alcExe /project:$project /packagecachepath:$symbolsFolder /out:$appFilePath /assemblyprobingpaths:$compilerFolder
 
           if (Test-Path $appFilePath) {
             Write-Host "Built app: $appFilePath"
@@ -99,6 +102,6 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: thyme-bc-extension-production
+          name: timmie-bc-extension-production
           path: 'output/*.app'
           if-no-files-found: warn

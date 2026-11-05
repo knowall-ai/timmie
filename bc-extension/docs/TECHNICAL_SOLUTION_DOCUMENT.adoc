@@ -27,7 +27,7 @@ include::CONFIDENTIALITY.adoc[]
 |Status |Implementing
 |Author |KnowAll AI
 |Project |Thyme Time Tracking
-|Repository |https://github.com/knowall-ai/thyme-bc-extension
+|Repository |https://github.com/knowall-ai/timmie/tree/main/bc-extension
 |Related Repository |https://github.com/knowall-ai/thyme
 |Original Issue |https://github.com/knowall-ai/thyme/issues/41
 |===

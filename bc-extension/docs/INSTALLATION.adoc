@@ -15,7 +15,7 @@
 
 [source,bash]
 ----
-git clone https://github.com/knowall-ai/thyme-bc-extension.git
+git clone https://github.com/knowall-ai/timmie.git
 ----
 
 === Step 2: Create Azure AD App Registration
@@ -102,7 +102,7 @@ Create a release for Production deployment:
 
 [source,bash]
 ----
-gh release create v1.0.0 --title "Initial Release" --notes "First production deployment"
+gh release create bc-v1.0.0 --title "Initial Release" --notes "First production deployment"
 ----
 
 == Option 2: Manual Deployment (VS Code)
@@ -116,8 +116,8 @@ gh release create v1.0.0 --title "Initial Release" --notes "First production dep
 
 [source,bash]
 ----
-git clone https://github.com/knowall-ai/thyme-bc-extension.git
-code thyme-bc-extension
+git clone https://github.com/knowall-ai/timmie.git
+code timmie/bc-extension
 ----
 
 === Step 3: Download Symbols

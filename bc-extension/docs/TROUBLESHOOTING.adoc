@@ -118,5 +118,5 @@
 
 == Getting Help
 
-* https://github.com/knowall-ai/thyme-bc-extension/issues[Open an Issue]
+* https://github.com/knowall-ai/timmie/issues[Open an Issue]
 * https://learn.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/devenv-develop-custom-api[Microsoft BC API Docs]

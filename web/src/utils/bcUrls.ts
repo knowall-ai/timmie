@@ -23,7 +23,7 @@ const BC_PAGES = {
 };
 
 /** Where to download the Timmie BC Extension */
-export const BC_EXTENSION_GITHUB_URL = 'https://github.com/knowall-ai/timmie-bc-extension';
+export const BC_EXTENSION_GITHUB_URL = 'https://github.com/knowall-ai/timmie/tree/main/bc-extension';
 
 /**
  * The extension's name in Business Central (Extension Management, AppSource). It keeps
