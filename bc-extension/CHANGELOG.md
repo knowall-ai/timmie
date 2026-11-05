@@ -2,6 +2,21 @@
 
 Notable changes to the Thyme BC Extension. Versions match `app.json`.
 
+## 1.27.0.5
+
+### Fixed
+
+- `jobPlanningLines` POST matches an existing line on its line type too, so posting a Billable line
+  no longer updates a Budget line for the same task, date and resource.
+- `projectNotes` keeps the request's other filters and sorting; `LoadNotes` used to clear them, so
+  `$filter=jobNo eq 'PR00010' and createdBy eq 'BOB'` returned every note on the project.
+- `timeSheetDetails` PATCH raises the same errors as POST when the line, time sheet or date is
+  wrong, instead of returning success without saving anything.
+- A timesheet review finding's key (review entry number and line number) can't be changed through
+  the API, as a plan review finding's can't. Delete it and create a new one instead.
+- `THYME USER`'s insert on suggestion requests is indirect, through the `suggestionRequests` API page
+  only, so the page's check of who the request is for can't be bypassed.
+
 ## 1.27.0.4
 
 ### Fixed
