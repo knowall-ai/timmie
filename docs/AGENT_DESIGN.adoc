@@ -112,18 +112,27 @@ work has stopped, and only then stops; it is a presence indicator, not a lock.
 
 *Handover.* Two agents must not work one company at once, and heartbeats can't guarantee that
 (two agents starting together both see stale heartbeats). So ownership is a *lease* in BC, one
-record per company (`agentLeases`: owner agent, lease expiry). An agent takes it with a
-conditional write (`If-Match` on the record's ETag), which BC makes atomic: of two agents trying
-at once, exactly one succeeds. It renews the lease with every heartbeat and releases it when its
-work has stopped. Claiming a request and running a sweep both require holding the lease, and
-every write checks it is still held, so an agent that loses the lease (expired, or taken after
-expiry) stops without writing. The incoming agent gets the lease only when the outgoing agent
-releases it or lets it expire, which happens after its work has drained. The shared core in
-`agent/` does all of this for the worker, the skill pack and the MCP server alike, so it holds in
-both directions. A request the outgoing agent was holding when it lost the lease is left Running
-and reclaimed by the new agent after 30 minutes, like any stale request. Switching back to
-*Timmie* needs nothing more than the setting, as long as the consent and BC app user are still
-in place.
+record per company (`agentLeases`: owner agent, lease expiry, epoch, requested owner). An agent
+takes it with a conditional write (`If-Match` on the record's ETag), which BC makes atomic: of two
+agents trying at once, exactly one succeeds, and each take adds one to the epoch. It renews the
+lease with every heartbeat and releases it when its work has stopped.
+
+* *Every protected write is fenced.* Claiming a request, running a sweep and every write the
+  agent makes carry the epoch it holds. The extension checks, in the same transaction as the
+  write, that the company's lease still has that epoch and owner and hasn't expired, and refuses
+  the write (409) otherwise. So a slow write from an agent whose lease has expired or been taken
+  over can't land, even if it was sent while the lease was still held.
+* *Switching agent asks the holder to let go.* When an admin changes the agent in Settings, the
+  web app sets the lease's requested owner in BC (one more BC write, not an agent endpoint). The
+  holder sees it when it renews, drains its work and releases. The extension refuses a renewal by
+  anyone other than the requested owner, so an agent that ignores the request, such as an
+  old-style custom agent, loses the lease when it next expires. The requested owner then takes it.
+
+The shared core in `agent/` does all of this for the worker, the skill pack and the MCP server
+alike, so it holds in both directions. A request the outgoing agent was holding when it lost the
+lease is left Running and reclaimed by the new agent after 30 minutes, like any stale request.
+Switching back to *Timmie* needs nothing more than the setting, as long as the consent and BC app
+user are still in place.
 
 == The contract: the Timmie BC Extension API
 
@@ -174,8 +183,8 @@ All entities are under `/api/knowall/thyme/v1.0/companies({id})/`.
 | Online if seen in the last 5 minutes
 
 | `agentLeases` (new)
-| One record per company: `ownerAgent`, `expiresAt`. Who may work this company (see _Handover_)
-| Agent only, by conditional write (`If-Match`); renewed with the heartbeat
+| One record per company: `ownerAgent`, `expiresAt`, `epoch`, `requestedOwner`. Who may work this company (see _Handover_)
+| Agent, by conditional write (`If-Match`); renewed with the heartbeat. The web app sets `requestedOwner` when the agent setting changes
 | Held → released, or expired and taken over
 
 | `projectSourceLinks`, `dayNotes`, `projectNotes`
