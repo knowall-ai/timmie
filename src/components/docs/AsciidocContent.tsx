@@ -39,12 +39,18 @@ export function tablesToDisclosures(html: string): string {
   const usedIds = new Set<string>();
 
   doc.querySelectorAll('table').forEach((table) => {
-    // Only a question-and-answer table: every row has exactly two cells. Any other
-    // shape is left as a table rather than losing or inventing cells.
+    // Only a question-and-answer table: every row has exactly two cells, both plain
+    // (a header-style column renders as <th>). Any other shape is left as a table
+    // rather than losing or inventing cells.
     const rows = Array.from(table.querySelectorAll('tbody tr')).map((row) =>
-      Array.from(row.querySelectorAll('td'))
+      Array.from(row.children)
     );
-    if (rows.length === 0 || rows.some((cells) => cells.length !== 2)) return;
+    if (
+      rows.length === 0 ||
+      rows.some((cells) => cells.length !== 2 || cells.some((cell) => cell.tagName !== 'TD'))
+    ) {
+      return;
+    }
 
     const list = doc.createElement('div');
     list.className =

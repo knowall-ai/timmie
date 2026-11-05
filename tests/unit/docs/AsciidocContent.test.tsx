@@ -137,6 +137,19 @@ describe('tablesToDisclosures', () => {
     expect(parse(threeColumns).querySelectorAll('details').length).toBe(0);
     expect(parse(threeColumns).querySelectorAll('table tbody td').length).toBe(3);
 
+    // A header-style column renders as <th>, so a "h,1,1" table has two <td> per row
+    // but is still three columns: it stays a table and keeps the <th> content
+    const headerColumn = tablesToDisclosures(
+      toHtml(`[cols="h,1,1"]
+|===
+| port
+| number
+| 3101
+|===`)
+    );
+    expect(parse(headerColumn).querySelectorAll('details').length).toBe(0);
+    expect(parse(headerColumn).querySelector('table tbody th')?.textContent).toBe('port');
+
     const oneColumn = tablesToDisclosures(toHtml('|===\n| Only cell\n|==='));
     expect(parse(oneColumn).querySelectorAll('details').length).toBe(0);
     expect(parse(oneColumn).querySelector('table')).not.toBeNull();
