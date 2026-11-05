@@ -1,0 +1,17 @@
+== Contact Information
+
+**KnowAll AI Technical Support:**
+
+* General support: support@knowall.ai
+* Repository: https://github.com/knowall-ai/thyme-bc-extension
+* Issue tracker: https://github.com/knowall-ai/thyme-bc-extension/issues
+
+**Related Projects:**
+
+* Thyme app (frontend): https://github.com/knowall-ai/thyme
+* Thyme app issue: https://github.com/knowall-ai/thyme/issues/41 — original BC API limitation that motivated this extension
+
+**Microsoft Documentation:**
+
+* Business Central custom APIs: https://learn.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/devenv-develop-custom-api
+* AL language reference: https://learn.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/devenv-programming-in-al

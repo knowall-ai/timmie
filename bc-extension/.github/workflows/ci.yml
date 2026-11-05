@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build AL extension
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install BcContainerHelper
+        shell: powershell
+        run: |
+          Install-Module BcContainerHelper -Force -AllowClobber
+          Import-Module BcContainerHelper
+
+      - name: Resolve BC artifact URL
+        id: resolve_artifact
+        shell: powershell
+        run: |
+          Import-Module BcContainerHelper
+          # Resolve the artifact once so the cache key matches the exact
+          # artifact used for compilation in the next step.
+          $artifactUrl = Get-BCArtifactUrl -type Sandbox -country gb -select Latest
+          Write-Host "Using artifact: $artifactUrl"
+          "artifact_url=$artifactUrl" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Cache BC compiler
+        uses: actions/cache@v4
+        with:
+          path: c:\bccompiler
+          key: ${{ runner.os }}-bccompiler-${{ steps.resolve_artifact.outputs.artifact_url }}
+
+      - name: Compile AL extension
+        shell: powershell
+        run: |
+          Import-Module BcContainerHelper
+
+          $artifactUrl    = '${{ steps.resolve_artifact.outputs.artifact_url }}'
+          $compilerFolder = New-BcCompilerFolder -artifactUrl $artifactUrl -cacheFolder "c:\bccompiler"
+          Write-Host "Compiler folder: $compilerFolder"
+
+          # Locate alc.exe with an explicit fallback chain. Fail loudly with
+          # a clear message if it cannot be found anywhere under the folder
+          # so we don't end up calling `& $null` later.
+          $primaryAlcExe  = Join-Path $compilerFolder "extension\bin\win32\alc.exe"
+          $fallbackAlcExe = Join-Path $compilerFolder "extension\bin\alc.exe"
+          $alcExe = $primaryAlcExe
+          if (-not (Test-Path $alcExe)) {
+            $alcExe = $fallbackAlcExe
+          }
+          if (-not (Test-Path $alcExe)) {
+            $alcExe = (Get-ChildItem -Path $compilerFolder -Filter "alc.exe" -Recurse | Select-Object -First 1).FullName
+          }
+          if ([string]::IsNullOrWhiteSpace($alcExe) -or -not (Test-Path $alcExe)) {
+            throw "Could not find alc.exe under compiler folder '$compilerFolder'. Checked candidate paths: '$primaryAlcExe', '$fallbackAlcExe'."
+          }
+          Write-Host "ALC path: $alcExe"
+
+          # Compile against the downloaded symbols
+          $symbolsFolder = Join-Path $compilerFolder "symbols"
+          $outputFolder  = Join-Path $env:GITHUB_WORKSPACE "output"
+          New-Item -ItemType Directory -Path $outputFolder -Force | Out-Null
+
+          $appJson      = Get-Content (Join-Path $env:GITHUB_WORKSPACE "app.json") | ConvertFrom-Json
+          $appFileName  = "$($appJson.publisher)_$($appJson.name)_$($appJson.version).app"
+          $appFilePath  = Join-Path $outputFolder $appFileName
+
+          & $alcExe /project:$env:GITHUB_WORKSPACE /packagecachepath:$symbolsFolder /out:$appFilePath /assemblyprobingpaths:$compilerFolder
+
+          if (-not (Test-Path $appFilePath)) {
+            throw "Compilation failed - no .app file produced"
+          }
+
+          Write-Host "Compiled: $appFileName"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: thyme-bc-extension-pr-build
+          path: 'output/*.app'
+          if-no-files-found: error

@@ -1,0 +1,16 @@
+{
+    "al.enableCodeAnalysis": true,
+    "al.codeAnalyzers": [
+        "${CodeCop}",
+        "${UICop}",
+        "${PerTenantExtensionCop}"
+    ],
+    "al.packageCachePath": ".alpackages",
+    "editor.formatOnSave": true,
+    "[al]": {
+        "editor.wordBasedSuggestions": "off",
+        "editor.suggestSelection": "first",
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true
+    }
+}

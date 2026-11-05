@@ -1,0 +1,10 @@
+# Code owners for the Thyme BC Extension repository.
+#
+# Every file in this repo requires review from @BenGWeeks before merge,
+# enforced by branch protection on main with require_code_owner_reviews enabled.
+#
+# Format: <pattern> <owner...>
+# Order matters: later matching rules override earlier ones.
+# See https://docs.github.com/en/repositories/managing-your-repositories-settings-and-security/customizing-your-repository/about-code-owners
+
+*       @BenGWeeks

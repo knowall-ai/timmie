@@ -1,0 +1,56 @@
+= Technical Solution Document
+Thyme BC Extension - Custom API for Time Tracking
+:doctype: book
+:toc: left
+:toclevels: 2
+:sectlinks:
+:sectanchors:
+:sectnums!:
+:chapter-signifier:
+:icons: font
+:imagesdir: ../images
+:pdf-theme: knowall
+:pdf-themesdir: ../themes
+
+include::TERMS.adoc[]
+
+include::CONFIDENTIALITY.adoc[]
+
+== Document Information
+
+[cols="1,2",options="header"]
+|===
+|Attribute |Value
+
+|Document Title |Technical Solution Document - Thyme BC Extension
+|Version |1.0
+|Status |Implementing
+|Author |KnowAll AI
+|Project |Thyme Time Tracking
+|Repository |https://github.com/knowall-ai/thyme-bc-extension
+|Related Repository |https://github.com/knowall-ai/thyme
+|Original Issue |https://github.com/knowall-ai/thyme/issues/41
+|===
+
+== Document History
+
+include::includes/document-history.adoc[]
+
+:sectnums:
+
+include::SOLUTION_DESIGN.adoc[leveloffset=+1]
+
+include::INSTALLATION.adoc[leveloffset=+1]
+
+include::DEPLOYMENT.adoc[leveloffset=+1]
+
+include::TESTING.adoc[leveloffset=+1]
+
+[appendix]
+include::TROUBLESHOOTING.adoc[leveloffset=+1]
+
+[appendix]
+include::FAQS.adoc[]
+
+[appendix]
+include::CONTACTS.adoc[]

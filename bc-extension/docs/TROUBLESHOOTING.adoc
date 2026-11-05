@@ -1,0 +1,122 @@
+= Troubleshooting Guide
+:toc:
+
+== Common Issues
+
+[cols="1,2", options="header"]
+|===
+| Problem | Solution
+
+| `404 Not Found` when calling API
+| Extension not deployed or wrong environment. Verify deployment in BC Admin Center → Extensions.
+
+| `401 Unauthorized` error
+| Azure AD token expired or invalid. Re-authenticate with `az login` or check client credentials.
+
+| `403 Forbidden` on API call
+| Missing API permissions. Grant `Dynamics 365 Business Central → API.ReadWrite.All` in Azure Portal.
+
+| Symbols download fails in VS Code
+| Check BC environment is accessible. Run `AL: Clear Credentials Cache` and retry.
+
+| Build fails with missing dependencies
+| Run `AL: Download Symbols` to fetch latest BC symbols.
+
+| Extension won't publish
+| Check `app.json` version is incremented. BC won't reinstall same version.
+
+| GitHub Action fails at `Install-Module`
+| Windows runner issue. Ensure `runs-on: windows-latest` in workflow.
+
+| `New-BcAuthContext` returns null
+| Client secret expired. Create new secret in Azure AD app registration.
+
+| API returns empty results
+| Check company context. Ensure `BC_COMPANY` matches a valid company name.
+
+| `syncMode ForceSync` error
+| Breaking schema changes. May need to uninstall extension first, then reinstall.
+
+| Deployment works but API not visible
+| Wait 1-2 minutes for BC to register new API endpoints after deployment.
+
+| `Job` table not found in symbols
+| Using wrong BC version. Check `platform` and `application` versions in `app.json`.
+
+| `Compile-AppInBcContainer : A parameter cannot be found that matches parameter name 'authContext'`
+| Wrong function for BC Online. Use `Download-Artifacts` to get `alc.exe`, download symbols via dev API, compile with `alc.exe`, then deploy with `Publish-PerTenantExtensionApps`.
+
+| `Publish-BcContainerApp` fails for BC SaaS
+| Use `Publish-PerTenantExtensionApps` for BC Online environments instead of `Publish-BcContainerApp`.
+
+| `401 Unauthorized` with `Authentication_InvalidCredentials` when publishing
+| Azure AD app missing `Automation.ReadWrite.All` permission. Add this in Azure Portal → App registrations → API permissions → Dynamics 365 Business Central → Application permissions → `Automation.ReadWrite.All`, then grant admin consent.
+
+| `-schemaSyncMode ForceSync` validation error
+| Use `-schemaSyncMode Force` instead. Valid values are `Add` or `Force`.
+
+| `401 Unauthorized` even with correct Azure AD permissions
+| App not authorized in BC Admin Center. Go to BC Admin Center → Microsoft Entra Apps → Authorize Microsoft Entra app → enter Client ID → Save. This is required in addition to Azure Portal API permissions.
+
+| `Authentication_InvalidCredentials` even after BC Admin Center authorization
+| *Most common cause*: App not configured inside Business Central itself. BC Admin Center authorization is for tenant-level access only. For the Automation API, you must ALSO configure the app in Business Central: Open BC → search for "Microsoft Entra applications" → New → enter Client ID → set State to Enabled → add permission sets `D365 AUTOMATION` and `EXTEN. MGT. - ADMIN`. See https://learn.microsoft.com/en-us/dynamics365/business-central/dev-itpro/administration/automation-apis-using-s2s-authentication[Microsoft S2S Authentication Docs].
+
+| BC Admin Center "Grant" button doesn't change to "Authorized" after clicking
+| This requires the *Cloud Application Administrator* role in Azure AD (not just Dynamics 365 Administrator). However, you can proceed anyway - the more critical step is configuring the app inside Business Central itself with the "Microsoft Entra applications" page and assigning permission sets.
+
+| `AADSTS500113: No reply address is registered for the application`
+| Azure AD app missing redirect URI. Go to Azure Portal → App registrations → your app → Authentication → Add platform → Web → enter `https://businesscentral.dynamics.com/OAuthLanding.htm` → Configure.
+
+| `404 Not Found` when uploading extension via Automation API
+| The extension upload endpoint requires a 3-step process: (1) POST to `/extensionUpload` to create upload object, (2) PATCH to `/extensionUpload({id})/extensionContent` with the .app file bytes, (3) POST to `/extensionUpload({id})/Microsoft.NAV.upload` to trigger installation. A single POST to `/extensionUpload/Microsoft.NAV.upload` will return 404.
+
+| Extension deployment fails with "Unable to publish app" but no error message in API
+| *Version mismatch*: Your `app.json` targets a different BC version than your environment. Check `platform` and `application` values in `app.json` against your BC version. For example, if BC runs 27.2.x but `app.json` has `"platform": "24.0.0.0"`, update to `"platform": "27.0.0.0"`. The BC Automation API doesn't return detailed errors - you must view the Extension Deployment Status page in BC to see the actual error.
+
+| Extension upload fails with generic error, no details in API
+| *Placeholder app ID*: If your `app.json` has a placeholder ID like `"id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"`, BC will reject the upload. Generate a proper unique GUID using `uuidgen` (Linux/Mac) or `[guid]::NewGuid()` (PowerShell) and replace the placeholder.
+
+| `POST /timeSheets` returns a record with a blank `number` and `endingDate` of `0001-01-01`
+| Extension version is older than 1.10.0.0, which had no insert logic on the Time Sheets API - the record was written straight to the `Time Sheet Header` table without the number series or week end date, leaving an unusable row. Upgrade the extension, then delete the blank-numbered rows in BC (Time Sheets list) and recreate them. Thyme shows "No Timesheet Available" for the affected weeks.
+
+| `POST /timeSheets` fails with "Time Sheet Nos. must have a value in Resources Setup"
+| The company has no time sheet number series. In BC go to *Resources Setup* → set *Time Sheet Nos.* to a number series (create one under *No. Series* if needed), then retry.
+
+| `POST /timeSheets` fails with "A time sheet already exists for resource ... covering ..."
+| A time sheet already covers that period. Either the week was already created, or the `startingDate` is not aligned to the resource's week boundary and overlaps the neighbouring sheet. Check the existing sheets with `GET /timeSheets?$filter=resourceNo eq 'R0010'` and use a starting date that matches their weekday.
+
+| `timesheetReviews`, `timesheetReviewLines` or `timeSuggestions` returns an error saying you do not have permission to read or insert into a `Thyme` table
+| The extension's own tables are not covered by the standard D365 permission sets. In BC, assign `THYME AI AGENT` to the AI agent's Microsoft Entra application (search *Microsoft Entra applications* → open the app → *User Permission Sets*), and `THYME USER` to Thyme users (search *Users* → open the user → *User Permission Sets*).
+
+| A user doesn't see a timesheet review or time suggestion that exists, or `GET /timesheetReviews({id})` or `/timeSuggestions({id})` returns 404
+| Row-level security (1.15.0.1 and later) hides reviews from everyone except the time sheet's owner and approver, and suggestions from everyone except the resource's time sheet owner. Check the *Owner User ID* and *Approver User ID* on the time sheet (or *Time Sheet Owner User ID* on the resource card for suggestions). A user who should see every review and suggestion needs the `THYME ADMIN` permission set or *Time Sheet Admin.* ticked in *User Setup*. `SUPER` alone isn't enough. The AI agent's Microsoft Entra application needs `THYME AI AGENT`, or it only sees records for its own user.
+
+| `POST` or `PATCH` on `timesheetReviews` or `timesheetReviewLines` fails with "You are not allowed to change timesheet reviews"
+| Only the AI agent (`THYME AI AGENT`) or a Thyme administrator can write reviews. Assign `THYME AI AGENT` to the agent's Microsoft Entra application in BC (search *Microsoft Entra applications* → open the app → *User Permission Sets*).
+
+| `POST` or `PATCH` on `timeSuggestions` fails with "You are not allowed to change time suggestions for resource ..."
+| A user can only create or change suggestions for a resource whose *Time Sheet Owner User ID* is them, and can't move a suggestion to another resource. The AI agent and Thyme administrators aren't limited.
+
+| `POST /timeSuggestions` fails with "A suggestion for resource ... already exists"
+| A suggestion with the same `resourceNo`, `source`, `sourceRef` and `date` already exists. Find it with `GET /timeSuggestions?$filter=resourceNo eq 'R0010' and sourceRef eq '...'` and `PATCH` it instead.
+
+| `PATCH /thymeSetup({id})` fails with a permission error on `Thyme Setup`
+| Changing the default billable target needs the `THYME ADMIN` permission set (`THYME USER` can only read it). Assign `THYME ADMIN` to the user or Microsoft Entra application.
+
+| `GET /thymeSetup` returns an empty list
+| The setup record hasn't been created in this company yet. It is normally created on install, on upgrade and when a company is initialised, so this is rare. Creating it needs write permission on `Thyme Setup`: as a user with `THYME ADMIN`, open *Thyme Setup* in BC or call `GET /thymeSetup` once, and the record is created with a 75% default. Opening it as a user with only `THYME USER` doesn't create it.
+
+| A part-timer's capacity in Thyme is too high (for example 37.5h a week for someone who works two days)
+| Thyme defaults to hours per day x 5. Set *Thyme Weekly Capacity (Hours)* on the Resource Card (or `PATCH /resources({id})` with `{ "weeklyCapacityHours": 15 }`). If they work on any days rather than fixed weekdays, also tick *Thyme Flexible Working Days*.
+
+| A person shows 0 capacity and is greyed out in Thyme, but should count
+| Their weekly capacity is set to 0. Untick *Thyme Weekly Capacity Set* on the Resource Card (or `PATCH /resources({id})` with `{ "weeklyCapacitySet": false }`) to fall back to hours per day x 5, or enter their real weekly hours.
+
+| A person shows a 0% billable target but should use the company default
+| Their own target is set to 0. Untick *Thyme Billable Target Set* on the Resource Card (or `PATCH /resources({id})` with `{ "billableTargetSet": false }`) so Thyme falls back to the default.
+|===
+
+== Getting Help
+
+* https://github.com/knowall-ai/thyme-bc-extension/issues[Open an Issue]
+* https://learn.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/devenv-develop-custom-api[Microsoft BC API Docs]

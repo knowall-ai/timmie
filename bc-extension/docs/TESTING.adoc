@@ -1,0 +1,243 @@
+= Testing Guide
+:toc:
+
+== Prerequisites
+
+* Extension deployed to BC Sandbox environment
+* Azure AD app with `API.ReadWrite.All` permission
+* Valid authentication credentials
+
+== Testing the API Endpoints
+
+=== 1. Get Authentication Token
+
+[source,bash]
+----
+# Using Azure CLI
+az account get-access-token --resource https://api.businesscentral.dynamics.com
+
+# Or using client credentials
+curl -X POST "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token" \
+  -d "client_id={client_id}" \
+  -d "client_secret={client_secret}" \
+  -d "scope=https://api.businesscentral.dynamics.com/.default" \
+  -d "grant_type=client_credentials"
+----
+
+=== 2. Test Projects API
+
+[source,bash]
+----
+curl -H "Authorization: Bearer {token}" \
+  "https://api.businesscentral.dynamics.com/v2.0/{tenant}/Sandbox/api/knowall/thyme/v1.0/companies({companyId})/projects"
+----
+
+.Expected Response
+[source,json]
+----
+{
+  "value": [
+    {
+      "id": "guid-here",
+      "number": "J00010",
+      "description": "Website Redesign",
+      "sellToCustomerNo": "C00020",
+      "sellToCustomerName": "Fabrikam Inc",
+      "billToCustomerNo": "C00010",
+      "billToCustomerName": "Contoso Ltd",
+      "personResponsible": "John Smith",
+      "status": "Open",
+      "startingDate": "2026-01-01",
+      "endingDate": "2026-06-30",
+      "lastModifiedDateTime": "2026-01-06T12:00:00Z"
+    }
+  ]
+}
+----
+
+=== 3. Test Job Tasks API
+
+[source,bash]
+----
+curl -H "Authorization: Bearer {token}" \
+  "https://api.businesscentral.dynamics.com/v2.0/{tenant}/Sandbox/api/knowall/thyme/v1.0/companies({companyId})/jobTasks"
+----
+
+=== 4. Test with OData Filters
+
+[source,bash]
+----
+# Filter by status
+.../projects?$filter=status eq 'Open'
+
+# Filter job tasks by job number
+.../jobTasks?$filter=jobNo eq 'J00010'
+
+# Filter by job task type (Posting = billable)
+.../jobTasks?$filter=jobTaskType eq 'Posting'
+----
+
+== Using MCP Tools for Testing
+
+If you have the `business-central-sandbox` MCP server configured:
+
+[source]
+----
+# List projects
+mcp__business-central-sandbox__list_items resource=projects
+
+# Filter job tasks
+mcp__business-central-sandbox__get_items_by_field resource=jobTasks field=jobNo value=J00010
+----
+
+=== 5. Test weekly capacity on Resources
+
+[source,bash]
+----
+# Read (CRONUS demo resource)
+curl -H "Authorization: Bearer {token}" \
+  "https://api.businesscentral.dynamics.com/v2.0/{tenant}/Sandbox/api/knowall/thyme/v1.0/companies({companyId})/resources?\$filter=number eq 'KATHERINE'&\$select=number,weeklyCapacityHours,weeklyCapacitySet,flexibleWorkingDays"
+
+# Set 15 hours a week on flexible days (expect weeklyCapacitySet = true)
+curl -X PATCH -H "Authorization: Bearer {token}" -H "If-Match: *" -H "Content-Type: application/json" \
+  -d '{"weeklyCapacityHours": 15, "flexibleWorkingDays": true}' \
+  ".../resources({id})"
+
+# Explicit 0 (expect weeklyCapacitySet = true, weeklyCapacityHours = 0)
+#   -d '{"weeklyCapacityHours": 0}'
+# Back to "not set" (expect weeklyCapacitySet = false, weeklyCapacityHours = 0)
+#   -d '{"weeklyCapacitySet": false, "flexibleWorkingDays": false}'
+# Out of range (expect 400)
+#   -d '{"weeklyCapacityHours": 200}'
+----
+
+=== 6. Test GitHub usernames on Resources
+
+[source,bash]
+----
+# Read (expect githubUsername and canEditConnectedAccounts)
+curl -H "Authorization: Bearer {token}" \
+  ".../resources?\$filter=number eq 'KATHERINE'&\$select=number,githubUsername,canEditConnectedAccounts"
+
+# Set it with the action (a profile URL is stored as the login; expect 204 and githubUsername = katherine-contoso)
+curl -X POST -H "Authorization: Bearer {token}" -H "Content-Type: application/json" \
+  -d '{"githubUsername": "https://github.com/katherine-contoso"}' \
+  ".../resources({id})/Microsoft.NAV.setGitHubUsername"
+
+# Invalid (expect 400): -d '{"githubUsername": "-bad--name"}'
+# Clear it (expect githubUsername = ""): -d '{"githubUsername": ""}'
+# As a non-admin, someone else's resource (expect 400 "not allowed"; canEditConnectedAccounts = false on that row)
+----
+
+=== 7. Test day notes
+
+[source,bash]
+----
+# Can I change the plan? (expect canEditPlan on every row)
+curl -H "Authorization: Bearer {token}" \
+  ".../projects?\$select=number,canEditPlan&\$top=3"
+
+# Add a company-wide off-site day (expect 201, createdBy = you, resourceNo = "")
+curl -X POST -H "Authorization: Bearer {token}" -H "Content-Type: application/json" \
+  -d '{"noteDate": "2026-10-22", "note": "Company Off-Site", "noProjectWork": true}' \
+  ".../dayNotes"
+
+# A note for one CRONUS person (expect 201, resourceNo = "KATHERINE")
+curl -X POST -H "Authorization: Bearer {token}" -H "Content-Type: application/json" \
+  -d '{"noteDate": "2026-10-23", "resourceNo": "KATHERINE", "note": "Client workshop"}' \
+  ".../dayNotes"
+
+# Read a date range (expect both)
+curl -H "Authorization: Bearer {token}" \
+  ".../dayNotes?\$filter=noteDate ge 2026-10-19 and noteDate le 2026-10-25"
+
+# Blank note (expect 400): -d '{"noteDate": "2026-10-22", "note": "  "}'
+# As a user without permission to write Job Planning Lines, including a Thyme admin (expect 400
+# "You don't have permission to change day notes."; canEditPlan = false), for POST, PATCH and DELETE
+----
+
+=== 8. Test plan reviews
+
+[source,bash]
+----
+# Can I change the plan? (expect canEditPlan on every row)
+curl -H "Authorization: Bearer {token}" ".../resources?\$select=number,canEditPlan&\$top=3"
+
+# As the AI agent: a review of a CRONUS resource's week (weekStart must be a Monday), then a finding and a change
+curl -X POST -H "Authorization: Bearer {token}" -H "Content-Type: application/json" \
+  -d '{"subjectType": "Resource", "subjectNo": "KATHERINE", "weekStart": "2026-10-19", "planHash": "PENDING", "verdict": "Check", "summary": "One cell is not in quarter hours.", "reviewer": "Poppie"}' \
+  ".../planReviews"
+#   POST .../planReviewLines   {"reviewEntryNo": <entryNo>, "severity": "Warning", "check": "ROUNDING", "planningDate": "2026-10-22", "note": "7.17h"}
+#   POST .../planReviewChanges {"reviewEntryNo": <entryNo>, "reviewLineNo": 10000, "jobNo": "<job>", "jobTaskNo": "<task>",
+#                               "resourceNo": "KATHERINE", "planningDate": "2026-10-22", "currentHours": 7.17, "proposedHours": 7.25}
+#   PATCH .../planReviews({id}) {"planHash": "<sha256>"}
+# Expect 400: weekStart not a Monday; proposedHours 7.3; a change dated outside the week or for another resource
+# As a Thyme user: POST to planReviews (expect 400 "not allowed"); GET works
+
+# Request a review (as a planner; expect status Requested), then a second one (expect 400 "already been requested")
+curl -X POST -H "Authorization: Bearer {token}" -H "Content-Type: application/json" \
+  -d '{"subjectType": "Resource", "subjectNo": "KATHERINE", "weekStart": "2026-10-19"}' \
+  ".../planReviewRequests"
+# As a non-agent, PATCH the request (expect 400 "Only the AI agent can"); as a user without permission
+# to write Job Planning Lines, POST a request (expect 400; canEditPlan = false)
+
+# Ask for a time sheet to be reviewed again (as its owner or approver; expect status Requested),
+# then a second one (expect 400 "already been requested")
+curl -X POST -H "Authorization: Bearer {token}" -H "Content-Type: application/json" \
+  -d '{"timeSheetNo": "<a CRONUS time sheet No.>"}' \
+  ".../timesheetReviewRequests"
+# As the AI agent: PATCH it to Running, then Done (expect startedAt / finishedAt stamped)
+# As a non-agent, PATCH the request (expect 400 "Only the AI agent can"); as someone who neither owns
+# nor approves the time sheet, POST a request (expect 400 "not allowed") and GET it (expect 404)
+----
+
+=== 9. Test applying a finding's changes
+
+[source,bash]
+----
+# As a planner (canEditPlan = true), with the finding and change from section 8 (CRONUS resource
+# KATHERINE, 2026-10-22, currentHours 7.17 matching the cell): apply them (expect 204)
+curl -X POST -H "Authorization: Bearer {token}" \
+  ".../planReviewLines({findingId})/Microsoft.NAV.applyChanges"
+
+# Expect the cell's planning line to hold 7.25 hours and the finding to have appliedAt / appliedBy
+curl -H "Authorization: Bearer {token}" \
+  ".../planReviewLines({findingId})?\$select=lineNo,appliedAt,appliedBy"
+
+# Apply again (expect 400 "The plan changed since Poppie looked. Ask her to re-review.": the cell
+# no longer holds currentHours, and nothing changes)
+# A finding with two changes where the second cell has two lines (expect 400 "Edit this cell by hand: ...",
+# and the first cell unchanged: all or nothing)
+# proposedHours 0 (expect the line deleted); a change on an empty cell (expect a new Budget line)
+# Two changes for the same cell (expect 400 "Edit this cell by hand: the finding changes the same cell twice.")
+# A cell whose line is in another unit than the resource's base unit (expect 400 "Edit this cell by hand: ... uses unit ...")
+# As a user without permission to write Job Planning Lines (expect 400 "You don't have permission
+# to change the plan.")
+----
+
+== Validation Checklist
+
+* [ ] Projects API returns customer name and number
+* [ ] Projects API returns status field
+* [ ] Projects API returns dates (startingDate, endingDate)
+* [ ] Job Tasks API returns all tasks
+* [ ] Job Tasks API filters by jobTaskType work
+* [ ] OData $filter queries work correctly
+* [ ] OData $select queries work correctly
+* [ ] Resources API returns weeklyCapacityHours, weeklyCapacitySet and flexibleWorkingDays
+* [ ] Setting weeklyCapacityHours (including 0) sets weeklyCapacitySet; clearing the flag resets the hours
+* [ ] weeklyCapacityHours outside 0-168 is rejected
+* [ ] Resources API returns githubUsername and canEditConnectedAccounts
+* [ ] setGitHubUsername stores a valid login (from a login, @login or profile URL) and rejects invalid ones
+* [ ] A non-admin can set their own GitHub username but not someone else's
+* [ ] GitHub Username shows in the Thyme group on the Resource Card
+* [ ] Projects and Resources APIs return canEditPlan (true for a user who may write Job Planning Lines; false otherwise, including a Thyme admin without that permission)
+* [ ] Day notes can be created, changed and deleted by people who may change the plan, and only read by others
+* [ ] Day notes filter by a noteDate range; a blank note is rejected
+* [ ] Only the AI agent or a Thyme admin can write plan reviews, findings and changes; every Thyme user can read them
+* [ ] Plan review changes outside the review's week or subject, or not in quarter hours, are rejected
+* [ ] Deleting a plan review deletes its findings and changes
+* [ ] One open plan review request per subject-week; only the AI agent can change a request
+* [ ] One open timesheet review request per time sheet; only its owner, approver, a Thyme admin or the agent can create or see one; only the AI agent can change one
+* [ ] applyChanges applies all of a finding's changes or none; stale cells and cells with several or non-Budget lines are refused
+* [ ] applyChanges stamps appliedAt / appliedBy and is refused without permission to write Job Planning Lines

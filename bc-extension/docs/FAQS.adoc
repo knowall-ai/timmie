@@ -1,0 +1,33 @@
+== Frequently Asked Questions
+
+=== Why does this extension exist?
+
+Business Central's standard `/projects` API only exposes four fields (`id`, `number`, `displayName`, `lastModifiedDateTime`). The Thyme time tracking app needs additional fields — customer name, person responsible, status, dates, related job tasks, time sheets with approval status, and posted time entries — to function. This extension publishes those additional API surfaces under the `knowall/thyme/v1.0` API group without modifying any standard BC objects.
+
+=== Why is the API namespaced under `knowall/thyme/v1.0` rather than added to `microsoft/v2.0`?
+
+BC requires custom APIs to live under their own publisher and group to avoid colliding with Microsoft's. `APIPublisher = 'knowall'`, `APIGroup = 'thyme'`, and `APIVersion = 'v1.0'` together produce the URL prefix `/api/knowall/thyme/v1.0/...`. This is a Microsoft requirement, not a project preference.
+
+=== Why does the version in `app.json` need to be bumped on every change?
+
+Business Central Online's deployment mechanism (`Publish-PerTenantExtensionApps`) compares the incoming `.app` version against what is already installed and refuses to apply equal or lower versions. Without a bump, the deploy workflow appears to succeed but the new code never reaches the tenant. See `DEPLOYMENT.adoc` for the recommended `github.run_number`-based auto-bump approach that eliminates this source of friction.
+
+=== Why is the deploy workflow `windows-latest` rather than `ubuntu-latest`?
+
+The AL compiler `alc.exe` is distributed as a Windows binary by Microsoft. While community Linux ports exist, they are not officially supported. Using `windows-latest` runners ensures behaviour matches the AL extension in VS Code on developer machines and avoids divergence between local and CI builds.
+
+=== Can the extension be installed on Business Central on-premises?
+
+The extension itself is platform-agnostic AL code and would compile for on-premises BC. However, the deployment workflows in this repository target BC Online (SaaS) — they use `Publish-PerTenantExtensionApps` and the BC Online Automation API. Deploying to on-premises requires a different toolchain (`Publish-BcContainerApp`, container-based symbol downloads) which is not included here.
+
+=== Does this extension store any data?
+
+No. The extension contains only API page objects and a single codeunit (`ThymeTimeSheetActions`) that wraps existing BC time sheet approval methods. It does not define any tables and stores no data of its own — all queries and updates go through standard BC tables (Job, Job Task, Time Sheet Header, Time Sheet Line, Time Sheet Detail, Resource, Job Ledger Entry).
+
+=== Why is the user-information endpoint missing from this extension?
+
+User information is already available via Business Central's standard Automation API at `/api/microsoft/automation/v2.0/companies({id})/users`. Re-publishing the same data under a custom API group would duplicate the surface for no gain. The Thyme app calls Microsoft's endpoint directly for users and this extension only for project/time data.
+
+=== How are time sheet approvals propagated?
+
+The extension exposes `submit`, `approve`, `reject`, and `reopen` actions on Time Sheets and Time Sheet Lines. These actions are bound API operations that internally call the standard BC time-sheet approval methods via the `ThymeTimeSheetActions` codeunit. The behaviour mirrors what a user would do through the BC client — including any standard validation, workflow events, and security checks — so the approval state remains fully consistent with non-API access paths.

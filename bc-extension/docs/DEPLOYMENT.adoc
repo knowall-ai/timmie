@@ -1,0 +1,316 @@
+= Deployment Guide
+:toc:
+:toclevels: 3
+
+This document describes how the Thyme BC Extension is built, versioned, and deployed to Business Central Online.
+
+== Overview
+
+The extension is published to two BC Online environments:
+
+[cols="1,2,2", options="header"]
+|===
+| Environment | Tenant / Company | Trigger
+| Sandbox     | Contoso (knowall.ai sandbox) | Automatic on push to `main`
+| Production  | KnowAll (knowall.ai prod)    | Manual (today) — see <<production-deploy>>
+|===
+
+Both deploys are driven by GitHub Actions workflows in `.github/workflows/`:
+
+* `deploy-sandbox.yml` — builds and publishes to the Contoso sandbox
+* `deploy-production.yml` — builds and publishes to the KnowAll production tenant
+
+== Why versioning matters
+
+BC Online's `Publish-PerTenantExtensionApps` command compares the incoming `.app` package's version (from `app.json`) against what is currently installed. It applies the upgrade *only if* the incoming version is strictly greater. Equal or lower versions are silently skipped — the workflow appears to succeed, but the new code does not run.
+
+This is unique to BC: Azure App Service (used by sibling repos `thyme` and `zapdesk`) has no such constraint and replaces the deployed bundle on every push.
+
+The version in `app.json` uses BC's standard 4-octet format:
+
+----
+Major . Minor . Build . Revision
+----
+
+[cols="1,3", options="header"]
+|===
+| Octet     | Bumped when
+| Major     | Breaking API change (field removed, endpoint renamed, schema breakage)
+| Minor     | New endpoint, new field, or other additive feature
+| Build     | Bug fix or internal change with no API surface impact
+| Revision  | Reserved for build automation — see <<recommended-versioning>>
+|===
+
+[[sandbox-deploy]]
+== Sandbox deployment (automatic)
+
+Triggered by every push to `main` (which in practice means every merged PR).
+
+=== Pipeline steps
+
+The workflow at `.github/workflows/deploy-sandbox.yml`:
+
+. Authenticates to Azure AD using `BC_TENANT_ID`, `BC_CLIENT_ID`, `BC_CLIENT_SECRET` secrets
+. Downloads the BC Online compiler artifact (`alc.exe` and symbol packages) for the `gb` locale via `Get-BCArtifactUrl`
+. Compiles `src/` against `app.json` to produce `<publisher>_<name>_<version>.app`
+. Publishes the resulting `.app` package to the Contoso sandbox via `Publish-PerTenantExtensionApps` with `-schemaSyncMode Force`
+. Uploads the built `.app` as a workflow artifact for download
+
+=== Required secrets
+
+[cols="1,3", options="header"]
+|===
+| Secret              | Purpose
+| `BC_TENANT_ID`      | Azure AD tenant hosting the sandbox
+| `BC_CLIENT_ID`      | App registration with `API.ReadWrite.All` + `Automation.ReadWrite.All`
+| `BC_CLIENT_SECRET`  | Client secret for the above app registration
+|===
+
+See `docs/INSTALLATION.adoc` for how to create these.
+
+[[promotion-criteria]]
+== Promotion: sandbox to production
+
+=== Sandbox-first is structural
+
+Every change reaches the Contoso sandbox before production by virtue of how the workflows are wired:
+
+* `deploy-sandbox.yml` triggers on every push to `main` (i.e., every merged PR)
+* `deploy-production.yml` has no auto-trigger on push — it only runs on `release: published` or manual `workflow_dispatch`
+
+So the first deploy of any commit is *always* to sandbox. There is no path that bypasses it.
+
+=== Verification window (currently undefined)
+
+The time between a sandbox deploy and the corresponding production deploy has historically varied from ~30 minutes to over 14 weeks, with no documented criteria for what constitutes "ready to promote."
+
+Recommended minimum criteria before promoting `main` to production:
+
+. The change has been deployed to sandbox successfully (the `Deploy to Sandbox` workflow run shows green)
+. The Thyme app — pointed at the sandbox tenant — has exercised the changed endpoint(s) and returns the expected data
+. `app.json`'s version on `main` is strictly greater than the version currently installed in the production tenant (verifiable via the BC Admin Center → Extension Management)
+. No outstanding bug reports or issues against the new behaviour from sandbox usage
+
+These are guidelines, not gates. For higher confidence, see <<production-approval>>.
+
+=== Detecting drift
+
+To check what's currently deployed in each environment without the BC Admin Center:
+
+[source,bash]
+----
+# What's on main (== currently in sandbox after the latest auto-deploy)
+git fetch origin && git show origin/main:app.json | grep version
+
+# What's in production: read the most recent successful Deploy to Production
+# workflow run and inspect its commit SHA
+gh run list \
+  --repo knowall-ai/thyme-bc-extension \
+  --workflow "Deploy to Production (KnowAll)" \
+  --status success \
+  --limit 1 \
+  --json headSha,createdAt,displayTitle
+----
+
+If the SHA returned by the second command is older than `origin/main`, sandbox and production have diverged.
+
+[[production-deploy]]
+== Production deployment
+
+=== Configured triggers
+
+The workflow `.github/workflows/deploy-production.yml` is configured to trigger on:
+
+* `release: published` — publishing a GitHub Release fires the deploy
+* `workflow_dispatch` — manual run from the Actions tab
+
+=== Current practice (manual `workflow_dispatch`)
+
+Historically, every production deploy on this repo has been triggered manually:
+
+. Verify the change is working in sandbox
+. Confirm `app.json` has been bumped beyond the currently-deployed production version
+. Open the *Actions* tab → *Deploy to Production (KnowAll)*
+. Click *Run workflow* against the `main` branch
+. Watch the run for success
+
+This works but has trade-offs:
+
+* No durable record of "what is in production right now" — recovering this requires correlating workflow_dispatch timestamps with `main`'s SHA at that moment
+* No release notes
+* Easy to forget to bump the version before promoting
+
+=== Recommended practice (GitHub Releases)
+
+The `release: published` trigger is already wired up but unused. Adopting it gives:
+
+* A tagged commit anchoring exactly what shipped
+* Auto-generated release notes from merged PR titles
+* A *Releases* page listing all production versions
+* Consistency with `thyme` and `zapdesk` repos in this org
+
+To promote `main` to production:
+
+[source,bash]
+----
+# Confirm app.json has the version you want to ship (e.g. 1.9.3.0)
+git fetch origin
+git checkout main && git pull
+cat app.json | grep version
+
+# Create and publish the release in one command
+gh release create v1.9.3.0 \
+  --target main \
+  --title "v1.9.3.0" \
+  --generate-notes
+----
+
+The `release: published` event fires immediately on publish, deploying the tagged commit to the KnowAll production tenant.
+
+[[production-approval]]
+== Production approval & access
+
+=== Today: no formal approval gate
+
+Anyone with `write` access to the repository can trigger a production deploy — there is no second-person review, no waiting period, and no environment protection rule.
+
+Specifically:
+
+* `main` branch protection: *not configured* (anyone with write can push directly)
+* GitHub `Production` environment: declared in the workflow, but the current GitHub Environment settings have no required reviewers or other protection rules configured
+* Production deploys can be initiated by `workflow_dispatch` *or* `release: published`, both of which require only repo write access
+
+This means today, "approval to deploy to production" is informal: whoever clicks the button is the approver.
+
+=== Recommended: Environment-gated approval
+
+The workflow at `.github/workflows/deploy-production.yml` already declares `environment: Production` (line 11). Adding required reviewers to that environment turns every production deploy into a two-person operation, with zero workflow changes.
+
+==== One-time setup
+
+. Open *Settings → Environments → Production* in the GitHub UI: \
+  `https://github.com/knowall-ai/thyme-bc-extension/settings/environments/`
+. Tick *Required reviewers* and add one or two trusted users
+. Optional: tick *Wait timer* and set 5–10 minutes to provide an abort window
+. Optional: under *Deployment branches and tags*, restrict to `v*.*.*.*` tag patterns so only properly tagged releases can deploy
+. Click *Save protection rules*
+
+==== Approval flow once enabled
+
+. A release is published (`gh release create v1.9.3.0 --target main --generate-notes`) or someone runs `workflow_dispatch`
+. The workflow run starts but the `deploy` job pauses immediately, *before* any steps run
+. Reviewers receive an email from GitHub and a notification at `https://github.com/notifications`
+. The reviewer opens the run page, e.g. `https://github.com/knowall-ai/thyme-bc-extension/actions/runs/{run_id}`
+. A yellow banner appears at the top of the page: *Waiting for review* with a *Review deployments* button
+. Clicking *Review deployments* opens a modal containing:
+  ** A checkbox for the `Production` environment
+  ** An optional comment field
+  ** *Approve and deploy* (green) and *Reject* (red) buttons
+. *Approve and deploy* — the job begins running and `Publish-PerTenantExtensionApps` ships the build
+. *Reject* — the workflow fails immediately and no deploy happens
+
+That modal is the approval UI. GitHub does not provide a separate dashboard for environment approvals; the gate lives on the workflow run page itself.
+
+=== Complementary: branch protection on `main`
+
+Environment-gated approval guards production. Branch protection guards what reaches sandbox in the first place. Recommended baseline:
+
+. Open `https://github.com/knowall-ai/thyme-bc-extension/settings/branches`
+. Add a rule for branch name pattern `main`
+. Tick *Require a pull request before merging* (optionally with required approvals)
+. Optional: *Require status checks to pass before merging*
+
+Together, these give a four-stage gate: open PR → CI pass → merge approval → environment reviewer approval.
+
+[[recommended-versioning]]
+== Versioning policy
+
+=== Today
+
+Every PR that changes code must also bump `app.json`'s version (any octet). This rule is documented in `CLAUDE.md` and is enforced by convention rather than by tooling.
+
+This policy has two known weaknesses:
+
+. *Parallel PR collision* — two PRs both bumping from `1.9.2.0` → `1.9.3.0` will conflict on `app.json`. Whichever merges second must rebase and re-bump, and if a stale version slips through, the deploy silently no-ops.
+. *Forced churn* — bumping for trivial changes inflates the version meaninglessly (note the historical jump from `1.0.0.1` straight to `1.2.0.0` "to force BC update").
+
+=== Recommended (CI-set revision)
+
+Treat the revision octet as machine-managed:
+
+* `Major.Minor.Build` in `app.json` is human-controlled and only changed for meaningful releases (per the table in <<why-versioning-matters,Why versioning matters>>)
+* `Revision` in `app.json` stays at `0` in source
+* The deploy workflow rewrites the revision to `${{ github.run_number }}` *before* invoking `alc.exe`, producing a strictly-monotonic version such as `1.9.3.47` per build
+
+Implementation sketch (PowerShell, to be added before the `alc.exe` invocation in both deploy workflows):
+
+[source,powershell]
+----
+# Auto-bump the revision octet from the workflow run number
+$appJsonPath = Join-Path $env:GITHUB_WORKSPACE "app.json"
+$appJson     = Get-Content $appJsonPath | ConvertFrom-Json
+$parts       = $appJson.version.Split('.')
+$parts[3]    = "$env:GITHUB_RUN_NUMBER"
+$appJson.version = $parts -join '.'
+$appJson | ConvertTo-Json -Depth 100 | Set-Content $appJsonPath
+Write-Host "Build version: $($appJson.version)"
+----
+
+Adopting this:
+
+* Removes the "always bump version" rule from `CLAUDE.md`
+* Eliminates parallel PR collisions on the version field
+* Keeps semantic versioning meaningful by reserving manual bumps for actual semantic changes
+* Costs nothing — `github.run_number` is strictly increasing
+
+== Rollback
+
+BC does not support direct downgrade — `Publish-PerTenantExtensionApps` rejects an `.app` whose version is lower than what is installed.
+
+To roll back:
+
+. Identify the last-known-good commit on `main`
+. Cherry-pick or revert forward (i.e., create a *new* commit that undoes the bad change)
+. Bump `app.json` to a *higher* version than what is currently deployed
+. Deploy the new build via the normal pipeline
+
+If the issue is severe and a forward-fix is not feasible, BC's *Extension Management* page in the BC Online tenant supports uninstalling the current version and reinstalling the previous `.app` artifact (downloaded from a prior workflow run). This is a manual, downtime-incurring operation and should be a last resort.
+
+== Troubleshooting
+
+=== Sandbox deploy succeeds but the new behaviour is not visible
+
+Most common cause: the version in `app.json` was not bumped, so BC silently skipped the upgrade. Confirm by:
+
+. Querying the deployed version via the BC Admin Center → *Extension Management*, or
+. If the publish step failed, checking the workflow log for `extensionDeploymentStatus` output (the sandbox workflow only prints this output inside the publish-step catch block, so it is only available on failure today)
+
+=== Workflow fails with `Token Error` or `Companies API Error`
+
+Verify in the BC Admin Center:
+
+. *Microsoft Entra Apps* in the left sidebar
+. Confirm the deployment app registration is listed and shows *Authorized* status
+. If a *Grant* link is shown, click it to complete authorization
+
+The deploy workflow prints a troubleshooting block with these steps when authentication fails.
+
+=== Symbols version mismatch
+
+Both deploy workflows download the *latest* sandbox artifact via `Get-BCArtifactUrl -country gb -select Latest`. Both KnowAll AI tenants are UK-based, so `gb` is correct in both places. If the latest artifact ever drifts ahead of the target tenant's installed BC version, compilation against newer symbols may use APIs that do not exist in the deployed environment.
+
+If this becomes an issue, pin the artifact version explicitly to match the target tenant's BC version:
+
+[source,powershell]
+----
+$artifactUrl = Get-BCArtifactUrl -type Sandbox -country gb -version 27.0.x.x
+----
+
+NOTE: An earlier configuration had `deploy-production.yml` pinned to `-country us` while `deploy-sandbox.yml` used `gb`. That divergence was removed (PR #36) so both environments now compile against identical symbols.
+
+== Related documentation
+
+* `docs/INSTALLATION.adoc` — initial setup, Azure AD app registration, secret configuration
+* `docs/TROUBLESHOOTING.adoc` — common errors and resolutions
+* `docs/SOLUTION_DESIGN.adoc` — extension architecture and API design
+* `CLAUDE.md` — repository-level guidance for AI-assisted development

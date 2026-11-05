@@ -1,0 +1,848 @@
+= Solution Design
+:toc:
+
+== Overview
+
+The Thyme BC Extension provides custom API endpoints that expose Business Central Job, Job Task, Time Sheet, Resource, and Time Entry data with additional fields not available in the standard BC API v2.0.
+
+== Problem Statement
+
+The standard BC API v2.0 `/projects` endpoint only returns 4 fields:
+
+* `id` - System GUID
+* `number` - Job number
+* `displayName` - Combined customer/project name
+* `lastModifiedDateTime` - Last modified timestamp
+
+This is insufficient for the Thyme time tracking app which needs:
+
+* Customer name and number (for grouping projects by client)
+* Person responsible (project manager)
+* Project status (to filter active projects)
+* Start/end dates (for project timeline)
+* Job tasks (for time entry allocation)
+* Time sheets with approval status (Open, Submitted, Approved, Rejected)
+* Resources with capacity/hours targets
+* Posted time entries from Job Ledger
+
+== Architecture
+
+[source]
+----
+┌─────────────────┐     ┌──────────────────────┐     ┌─────────────────┐
+│   Thyme App     │────▶│  Custom API Pages    │────▶│   BC Tables     │
+│  (TypeScript)   │     │  (AL Extension)      │     │   (Job, etc.)   │
+└─────────────────┘     └──────────────────────┘     └─────────────────┘
+         │                        │
+         │                        │
+         ▼                        ▼
+   OAuth 2.0 Token          API Configuration:
+   (Azure AD)               - APIGroup: thyme
+                            - APIPublisher: knowall
+                            - APIVersion: v1.0
+----
+
+== Time Entry Lifecycle
+
+Understanding the distinction between Time Sheets and Time Entries is crucial for integrating with Business Central.
+
+=== Lifecycle Diagram
+
+[source]
+----
+User enters time    → timeSheetLine (Status: Open)
+        ↓
+User submits        → timeSheetLine (Status: Submitted)
+        ↓
+Manager approves    → timeSheetLine (Status: Approved)
+        ↓
+Posted to ledger    → timeEntry (Job Ledger Entry - permanent record)
+----
+
+=== Time Sheet Lines vs Time Entries
+
+[cols="1,2,2", options="header"]
+|===
+| Aspect | `timeSheetLines` | `timeEntries`
+
+| BC Table
+| Time Sheet Line (table 951)
+| Job Ledger Entry (table 169)
+
+| Stage
+| In approval workflow
+| Posted to ledger (finalized)
+
+| Status
+| Open → Submitted → Approved
+| N/A (already posted)
+
+| Editable
+| Yes (until posted)
+| No (permanent accounting record)
+
+| Purpose
+| Track & approve time before posting
+| Accounting, billing, historical reports
+|===
+
+=== When to Use Each Endpoint
+
+* **`/timeSheets` and `/timeSheetLines`**: Use for approval workflows, viewing pending/submitted time entries, and editing unposted entries. These represent time that is still in the review process.
+
+* **`/timeEntries`**: Use for finalized reports, billing calculations, and historical records. These are permanent ledger entries that cannot be modified.
+
+== API Design
+
+=== Endpoint Structure
+
+[source]
+----
+https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/knowall/thyme/v1.0/companies({companyId})/projects
+https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/knowall/thyme/v1.0/companies({companyId})/jobTasks
+https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/knowall/thyme/v1.0/companies({companyId})/timeSheets
+https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/knowall/thyme/v1.0/companies({companyId})/timeSheetLines
+https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/knowall/thyme/v1.0/companies({companyId})/resources
+https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/knowall/thyme/v1.0/companies({companyId})/timeEntries
+https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/knowall/thyme/v1.0/companies({companyId})/timesheetReviews
+https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/knowall/thyme/v1.0/companies({companyId})/timesheetReviewLines
+https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/knowall/thyme/v1.0/companies({companyId})/timeSuggestions
+https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/knowall/thyme/v1.0/companies({companyId})/suggestionRequests
+https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/knowall/thyme/v1.0/companies({companyId})/agentHeartbeats
+https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/knowall/thyme/v1.0/companies({companyId})/dayNotes
+https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/knowall/thyme/v1.0/companies({companyId})/planReviews
+https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/knowall/thyme/v1.0/companies({companyId})/planReviewLines
+https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/knowall/thyme/v1.0/companies({companyId})/planReviewChanges
+https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/knowall/thyme/v1.0/companies({companyId})/planReviewRequests
+https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/knowall/thyme/v1.0/companies({companyId})/timesheetReviewRequests
+https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/knowall/thyme/v1.0/companies({companyId})/thymeSetup
+----
+
+=== Projects API (Page 50100)
+
+Maps to the BC `Job` table (table 167).
+
+[cols="1,1,1", options="header"]
+|===
+| API Field | BC Field | Notes
+
+| id | SystemId | Primary key (GUID)
+| number | No. | Job number
+| description | Description | Project name
+| sellToCustomerNo | Sell-to Customer No. | Who the work is for (the end client of partner work). Set through codeunit 50109 `Thyme Project Customer`: BC's Sell-to validation runs (refused once the project has invoiced (Sale) entries) but the Bill-to validation it triggers is skipped, so the Bill-to customer, its contact, terms, default dimensions and the planning line prices stay as they are. A project with no Bill-to gets the Sell-to customer, as in BC
+| sellToCustomerName | Sell-to Customer Name | Read-only; filled in by BC from the customer
+| billToCustomerNo | Bill-to Customer No. | Who pays (the partner, for partner work)
+| billToCustomerName | Bill-to Name | Bill-to customer display name
+| personResponsible | Person Responsible | Project manager
+| status | Status | Enum: Planning, Quote, Open, Completed
+| startingDate | Starting Date | Project start
+| endingDate | Ending Date | Project end
+| currencyCode | Currency Code | Currency of the project's prices; blank = LCY. Read-only
+| canEditPlan | (calculated) | Read-only, per caller: whether the caller may change the plan (permission to write Job Planning Lines)
+| lastModifiedDateTime | SystemModifiedAt | For sync
+|===
+
+=== Job Tasks API (Page 50101)
+
+Maps to the BC `Job Task` table (table 1001).
+
+[cols="1,1,1", options="header"]
+|===
+| API Field | BC Field | Notes
+
+| id | SystemId | Primary key (GUID)
+| jobNo | Job No. | Parent job reference
+| jobTaskNo | Job Task No. | Task number
+| description | Description | Task name
+| jobTaskType | Job Task Type | Enum: Posting, Heading, Total, Begin-Total, End-Total
+| lastModifiedDateTime | SystemModifiedAt | For sync
+|===
+
+=== Time Sheets API (Page 50102)
+
+Maps to the BC `Time Sheet Header` table (table 950).
+
+[cols="1,1,1", options="header"]
+|===
+| API Field | BC Field | Notes
+
+| id | SystemId | Primary key (GUID)
+| number | No. | Time sheet number
+| startingDate | Starting Date | Week start
+| endingDate | Ending Date | Week end
+| resourceNo | Resource No. | Associated resource
+| ownerUserId | Owner User ID | Time sheet owner
+| approverUserId | Approver User ID | Assigned approver
+| openExists | Open Exists | True if any line is Open (FlowField)
+| submittedExists | Submitted Exists | True if any line is Submitted (FlowField)
+| rejectedExists | Rejected Exists | True if any line is Rejected (FlowField)
+| approvedExists | Approved Exists | True if any line is Approved (FlowField)
+| lastModifiedDateTime | SystemModifiedAt | For sync
+|===
+
+==== Creating a Time Sheet
+
+`POST /timeSheets` with `resourceNo` and `startingDate` creates a time sheet header
+equivalent to the one BC's *Create Time Sheets* batch job produces. The extension
+supplies the rest on insert:
+
+* `number` from the **Time Sheet Nos.** series on Resources Setup
+* `endingDate` as `startingDate + 6` days
+* `ownerUserId` and `approverUserId` from the resource card
+
+The insert is rejected if the resource does not have **Use Time Sheet** enabled, if no
+time sheet number series is configured, or if the period overlaps an existing time
+sheet for that resource.
+
+==== Bound Actions
+
+The Time Sheets API supports the following bound actions for approval workflow:
+
+[cols="1,2,2", options="header"]
+|===
+| Action | Endpoint | Description
+
+| submit
+| `POST /timeSheets({id})/Microsoft.NAV.submit`
+| Submits the time sheet for approval
+
+| approve
+| `POST /timeSheets({id})/Microsoft.NAV.approve`
+| Approves a submitted time sheet
+
+| reject
+| `POST /timeSheets({id})/Microsoft.NAV.reject`
+| Rejects a submitted time sheet
+
+| reopen
+| `POST /timeSheets({id})/Microsoft.NAV.reopen`
+| Reopens a rejected/approved time sheet for editing
+|===
+
+=== Time Sheet Lines API (Page 50103)
+
+Maps to the BC `Time Sheet Line` table (table 951).
+
+[cols="1,1,1", options="header"]
+|===
+| API Field | BC Field | Notes
+
+| id | SystemId | Primary key (GUID)
+| timeSheetNo | Time Sheet No. | Parent time sheet
+| lineNo | Line No. | Line number
+| timeSheetStartingDate | Time Sheet Starting Date | Week start
+| type | Type | Enum: Resource, Job, Absence, Assembly Order, Service
+| jobNo | Job No. | Job reference (if type=Job)
+| jobTaskNo | Job Task No. | Task reference (if type=Job)
+| description | Description | Line description
+| causeOfAbsenceCode | Cause of Absence Code | Absence reason (if type=Absence)
+| workTypeCode | Work Type Code | Work type
+| chargeable | Chargeable | Billable flag
+| totalQuantity | Total Quantity | Total hours
+| status | Status | Enum: Open, Submitted, Rejected, Approved
+| approvedBy | Approved By | Approver user ID
+| approvalDate | Approval Date | Date approved
+| posted | Posted | Whether posted to ledger
+| lastModifiedDateTime | SystemModifiedAt | For sync
+|===
+
+==== Bound Actions
+
+The Time Sheet Lines API supports the following bound actions for line-level approval:
+
+[cols="1,2,2", options="header"]
+|===
+| Action | Endpoint | Description
+
+| approve
+| `POST /timeSheetLines({id})/Microsoft.NAV.approve`
+| Approves a specific time sheet line
+
+| reject
+| `POST /timeSheetLines({id})/Microsoft.NAV.reject`
+| Rejects a specific time sheet line
+
+| reopen
+| `POST /timeSheetLines({id})/Microsoft.NAV.reopen`
+| Reopens a rejected/approved line for editing
+|===
+
+=== Resources API (Page 50104)
+
+Maps to the BC `Resource` table (table 156).
+
+[cols="1,1,1", options="header"]
+|===
+| API Field | BC Field | Notes
+
+| id | SystemId | Primary key (GUID)
+| number | No. | Resource number
+| name | Name | Resource name
+| searchName | Search Name | Search name for lookup
+| type | Type | Enum: Person, Machine
+| capacity | Capacity | Weekly hours target (FlowField)
+| unitCost | Unit Cost | Cost per unit
+| unitPrice | Unit Price | Price per unit
+| baseUnitOfMeasure | Base Unit of Measure | Hour/Day units
+| resourceGroupNo | Resource Group No. | Resource group code
+| blocked | Blocked | Whether resource is blocked
+| privacyBlocked | Privacy Blocked | Privacy blocked flag
+| countryRegionCode | Country/Region Code | Read-only; blank = the company's country. The plan review uses it for public holidays
+| useTimeSheet | Use Time Sheet | Time sheet enabled
+| timeSheetOwnerUserId | Time Sheet Owner User ID | Owner for time sheets
+| timeSheetApproverUserId | Time Sheet Approver User ID | Approver for time sheets
+| billableTargetPercent | Thyme Billable Target % | Extension field 50100; 0-100, only meaningful when billableTargetSet is true
+| billableTargetSet | Thyme Billable Target Set | Extension field 50101; false = use the company default
+| weeklyCapacityHours | Thyme Weekly Capacity (Hours) | Extension field 50102; 0-168, only meaningful when weeklyCapacitySet is true
+| weeklyCapacitySet | Thyme Weekly Capacity Set | Extension field 50103; false = hours per day x 5
+| flexibleWorkingDays | Thyme Flexible Working Days | Extension field 50104; works the weekly capacity on any days
+| githubUsername | Thyme GitHub Username | Extension field 50105; the person's GitHub login (blank = not set)
+| canEditConnectedAccounts | (calculated) | Read-only, per caller: whether the caller may change githubUsername
+| canEditPlan | (calculated) | Read-only, per caller: whether the caller may change the plan (permission to write Job Planning Lines)
+| lastDateModified | Last Date Modified | Last modification date
+| lastModifiedDateTime | SystemModifiedAt | For sync
+|===
+
+==== Billable targets: "not set" versus 0%
+
+A Decimal field can't be null in AL, so a blank target and a real 0% target would both read
+as `0`. The table extension `Thyme Resource` (50100) therefore pairs the percentage with a
+Boolean:
+
+* `Thyme Billable Target Set` = false: the person has no target of their own. Thyme uses
+  `Default Billable Target %` from Thyme Setup. The percentage is held at 0.
+* `Thyme Billable Target Set` = true: `Thyme Billable Target %` is the person's target, and
+  0 means 0%.
+
+Validating the percentage (on the Resource Card or through the API, including a value of 0)
+sets the flag to true. Validating the flag to false resets the percentage to 0. The
+percentage must be between 0 and 100 (MinValue/MaxValue). On the API page the percentage
+comes before the flag, so when a PATCH sends both, the flag is applied last and wins.
+
+Both fields appear in a *Thyme* group on the Resource Card (page extension 50100).
+
+==== Weekly capacity and flexible working days
+
+Thyme used to derive weekly capacity as hours per day (from the resource's HOUR unit of
+measure) x 5, which overstates part-timers. The same "set" pattern as the billable target
+applies:
+
+* `Thyme Weekly Capacity Set` = false: Thyme uses hours per day x 5. The hours are held at 0.
+* `Thyme Weekly Capacity Set` = true: `Thyme Weekly Capacity (Hours)` is the person's weekly
+  capacity. 0 is a real value: the person stays listed in Thyme but is left out of team
+  capacity, completion and the billable target (used for AI agents and anyone else who
+  shouldn't count).
+
+Validating the hours (including 0) sets the flag; validating the flag to false resets the
+hours. The hours must be between 0 and 168.
+
+`Thyme Flexible Working Days` says the person works their weekly capacity on any days rather
+than fixed weekdays (for example 15 hours on any two days). Thyme and the AI timesheet review
+then judge their week as a whole: no "missing day" findings, and a single day is only flagged
+when it exceeds a full day's hours. People who aren't flexible but work fewer than five days
+keep hours per day as their daily capacity, with the week capped at their weekly capacity.
+
+==== GitHub username (connected accounts)
+
+`Thyme GitHub Username` (field 50105, Text[39]) is the person's GitHub login. The AI agent uses
+it to find whose pull requests and issues are whose; it takes precedence over the agent's own
+config and its lookups (SAML identities, commit e-mail search). There is no Azure DevOps field: a
+person's DevOps user is their Microsoft 365 sign-in, derived from the time sheet owner.
+
+* Validation and normalisation (codeunit 50106 `Thyme Connected Accounts`): trimmed; a GitHub
+  profile URL or a leading `@` is reduced to the login; the result must be letters, digits and
+  single hyphens, not starting or ending with a hyphen, 1-39 characters. Blank clears it.
+* Who may change it (codeunit 50104 `Thyme Record Security`): a Thyme administrator for anyone,
+  and a person for their own resource, the one whose *Time Sheet Owner User ID* is them (the
+  owner as stored, so changing the owner in the same edit doesn't count). Checked in the field's
+  OnValidate, so it applies on the Resource Card, through PATCH and through the action.
+* Most people have no permission to modify resources, so the resources API has a bound action,
+  `setGitHubUsername`, that writes the field through an indirect modify permission on Resource (granted by THYME USER, usable only by codeunit 50106, which declares it) after that
+  check. It modifies without the Resource's OnModify trigger, so nothing else changes. A PATCH of
+  `githubUsername` works too, for callers who may modify resources.
+* `canEditConnectedAccounts` on `resources` tells Thyme whether to offer the edit control.
+
+The field is on the Resource Card's *Thyme* group.
+
+All three fields appear in the *Thyme* group on the Resource Card and are editable through the
+`resources` API with the standard Resource permissions.
+
+=== Time Entries API (Page 50105)
+
+Maps to the BC `Job Ledger Entry` table (table 169). Filtered to Resource-type entries only.
+
+[cols="1,1,1", options="header"]
+|===
+| API Field | BC Field | Notes
+
+| id | SystemId | Primary key (GUID)
+| entryNo | Entry No. | Ledger entry number
+| jobNo | Job No. | Parent job
+| jobTaskNo | Job Task No. | Task reference
+| postingDate | Posting Date | Entry date
+| type | Type | Entry type (filtered to Resource)
+| number | No. | Resource/item number
+| description | Description | Entry description
+| quantity | Quantity | Hours/units
+| unitCost | Unit Cost (LCY) | Cost per unit
+| totalCost | Total Cost (LCY) | Total cost
+| unitPrice | Unit Price (LCY) | Price per unit
+| totalPrice | Total Price (LCY) | Total price
+| currencyCode | Currency Code | Project currency of the entry; blank = LCY
+| unitCostProjectCurrency | Unit Cost | Cost per unit, project currency
+| totalCostProjectCurrency | Total Cost | Total cost, project currency
+| unitPriceProjectCurrency | Unit Price | Price per unit, project currency
+| totalPriceProjectCurrency | Total Price | Total price, project currency
+| workTypeCode | Work Type Code | Work classification
+| entryType | Entry Type | Usage or Sale
+| documentNo | Document No. | Source document
+| lastModifiedDateTime | SystemModifiedAt | For sync
+|===
+
+=== Project currency
+
+A Job can have a *Currency Code*, so its planning lines and ledger entries are priced in a
+foreign currency. BC stores each amount twice: in the project currency (`Unit Cost`,
+`Total Cost`, `Unit Price`, `Total Price`) and in the company's local currency (the same
+fields with `(LCY)`).
+
+The original API fields were mapped before projects in other currencies were considered, so
+they differ: `jobPlanningLines` exposed the project-currency fields and `timeEntries` the LCY
+ones. They keep that meaning for compatibility, and version 1.14.0.1 adds the other
+currency to each:
+
+[cols="1,1,1", options="header"]
+|===
+| Endpoint | Project currency | Local currency (LCY)
+
+| jobPlanningLines
+| unitCost, totalCost, unitPrice, totalPrice
+| unitCostLCY, totalCostLCY, unitPriceLCY, totalPriceLCY (read-only)
+
+| timeEntries
+| unitCostProjectCurrency, totalCostProjectCurrency, unitPriceProjectCurrency, totalPriceProjectCurrency
+| unitCost, totalCost, unitPrice, totalPrice
+|===
+
+`projects`, `jobPlanningLines` and `timeEntries` all return `currencyCode` (blank = LCY).
+Thyme shows customer prices (Billable Price, Invoiced Price) in the project currency and
+internal costs (Budget Cost, Actual Cost) in LCY, so each figure sums a single column.
+
+=== Timesheet Reviews API (Page 50109)
+
+Maps to the extension's own `Thyme Timesheet Review` table (table 50100). Written by an AI
+agent (insert/modify/delete) and read by Thyme.
+
+[cols="1,1,1", options="header"]
+|===
+| API Field | Table Field | Notes
+
+| id | SystemId | Primary key (GUID), read-only
+| entryNo | Entry No. | AutoIncrement primary key, read-only
+| timeSheetNo | Time Sheet No. | Required; relates to Time Sheet Header
+| versionStamp | Version Stamp | Required; latest lastModifiedDateTime across the time sheet's lines and details when reviewed
+| verdict | Verdict | Enum `Thyme Review Verdict`: Approve, Check, Query (defaults to Check)
+| summary | Summary | Text[2048]
+| reviewer | Reviewer | Text[100]
+| reviewedAt | Reviewed At | Defaults to the current date/time on insert
+| lastModifiedDateTime | SystemModifiedAt | For sync
+|===
+
+A secondary key on (Time Sheet No., Reviewed At) serves the "latest review" query
+`$filter=timeSheetNo eq 'TS00001'&$orderby=reviewedAt desc&$top=1`. Deleting a review
+deletes its review lines.
+
+=== Timesheet Review Lines API (Page 50110)
+
+Maps to the `Thyme Timesheet Review Line` table (table 50101), keyed on (Review Entry No., Line No.).
+
+[cols="1,1,1", options="header"]
+|===
+| API Field | Table Field | Notes
+
+| id | SystemId | Primary key (GUID), read-only
+| reviewEntryNo | Review Entry No. | Required; the review must exist
+| lineNo | Line No. | Assigned in steps of 10000 when 0
+| timeSheetNo | Time Sheet No. | Filled from the review when blank; must match the review
+| timeSheetLineNo | Time Sheet Line No. | 0 = whole time sheet
+| severity | Severity | Enum `Thyme Review Severity`: Info, Warning, Issue
+| note | Note | Text[500]
+| lastModifiedDateTime | SystemModifiedAt | For sync
+|===
+
+=== Time Suggestions API (Page 50111)
+
+Maps to the `Thyme Time Suggestion` table (table 50102). Written by an AI agent; read,
+accepted and dismissed by Thyme.
+
+[cols="1,1,1", options="header"]
+|===
+| API Field | Table Field | Notes
+
+| id | SystemId | Primary key (GUID), read-only
+| entryNo | Entry No. | AutoIncrement primary key, read-only
+| resourceNo | Resource No. | Required; relates to Resource
+| date | Date | Required
+| quantity | Quantity | Hours
+| jobNo | Job No. | Relates to Job
+| jobTaskNo | Job Task No. | Relates to Job Task within Job No.
+| description | Description | Text[250]
+| source | Source | Enum `Thyme Suggestion Source`: Calendar, GitHub, DevOps, Other
+| sourceRef | Source Ref | Text[250], e.g. meeting or pull request ID
+| sourceUrl | Source Url | Text[2048]
+| evidence | Evidence | Text[2048], short reasoning
+| confidence | Confidence | Enum `Thyme Suggestion Confidence`: High, Medium, Low
+| status | Status | Enum `Thyme Suggestion Status`: Pending (default), Accepted, Dismissed
+| timeSheetNo | Time Sheet No. | Set when accepted
+| timeSheetLineNo | Time Sheet Line No. | Set when accepted
+| createdBy | Created By | Text[100]
+| createdAt | Created At | Defaults to the current date/time on insert
+| actionedAt | Actioned At | Stamped when status leaves Pending, if blank
+| lastModifiedDateTime | SystemModifiedAt | For sync
+|===
+
+Keys on (Resource No., Date) for the week view and (Resource No., Source, Source Ref, Date)
+for upserts. Inserting a suggestion that matches an existing one on those four fields is
+rejected so the agent can re-run without duplicates; it should `PATCH` the existing row.
+Suggestions with a blank Source Ref are not checked.
+
+=== Suggestion Requests API (Page 50114)
+
+Maps to the `Thyme Suggestion Request` table (table 50104). Thyme creates a request to have
+the AI agent generate time suggestions for a resource and period now; the agent works through
+them and reports progress.
+
+[cols="1,1,3"]
+|===
+| API Field | BC Field | Notes
+
+| id | SystemId | OData key
+| entryNo | Entry No. | AutoIncrement, read-only
+| resourceNo | Resource No. | TableRelation Resource
+| fromDate | From Date | Not later than tomorrow (server date)
+| toDate | To Date | At most 7 days after fromDate, inclusive
+| status | Status | Enum `Thyme Suggestion Request Status`: Requested (forced on insert), Running, Done, Failed
+| progress | Progress | Text[250]: what the agent is doing now
+| createdCount | Created Count | Set by the agent when Done
+| updatedCount | Updated Count | Set by the agent when Done
+| errorMessage | Error Message | Text[250]: why it Failed
+| requestedBy | Requested By | UserId() on insert, read-only
+| requestedAt | Requested At | On insert, read-only
+| startedAt | Started At | Stamped when status leaves Requested, if blank
+| finishedAt | Finished At | Stamped on Done or Failed, if blank
+| lastModifiedDateTime | SystemModifiedAt | For polling
+|===
+
+Keys on (Resource No., From Date, To Date, Status) for Thyme's lookup and the one-open-request
+check, and (Status, Requested At) for the agent's queue. Inserting a second Requested or
+Running request for the same resource and period is rejected, and so is re-opening one with a
+PATCH. The check locks the Resource row first, so two simultaneous inserts can't both pass. The
+period rules apply on insert and modify.
+
+Security (codeunit `Thyme Record Security`): read and create for the resource's time sheet
+owner and approver (from the Resource card), Thyme administrators and the AI agent; change and
+delete for the AI agent only. Suggestions are not opened up to approvers: an approver who
+requests them sees the request's progress and counts, but the suggestions stay with the person
+they are for. The read-only `canRequestSuggestions` field on the Resources API answers "may I
+request for this resource?" per caller.
+
+=== Agent Heartbeats API (Page 50115)
+
+Maps to the `Thyme Agent Heartbeat` table (table 50105), one record per AI agent (primary key
+Agent Name). The agent PATCHes its record on every poll; BC stamps Last Seen At with the server
+time on insert and modify, whatever the agent sends. Thyme reads every record and treats the
+agent as online when the newest Last Seen At is under 5 minutes old; otherwise it disables
+*Request suggestions*. Fields: `agentName`, `lastSeenAt`, `status` (Text[250], e.g. "Idle"),
+`version`. Readable by every Thyme user (`THYME USER`); insert, modify and delete only for the AI
+agent.
+
+=== Day Notes API (Page 50122)
+
+Maps to the `Thyme Day Note` table (table 50111): a note on a particular day, e.g. "Company
+Off-Site", for the whole company (blank Resource No.) or one person. Thyme shows them on the Plan
+grid; the AI agent's plan review treats `noProjectWork` days like public holidays.
+
+[cols="1,1,3"]
+|===
+| API Field | BC Field | Notes
+
+| id | SystemId | OData key
+| entryNo | Entry No. | AutoIncrement, read-only
+| noteDate | Note Date | Required
+| resourceNo | Resource No. | TableRelation Resource; blank = the whole company
+| note | Note | Text[100], required (not just spaces)
+| noProjectWork | No Project Work | The day isn't available for project work (capacity 0 that day)
+| createdBy | Created By | UserId() on insert, read-only
+| createdAt | Created At | On insert, read-only
+| modifiedBy | Modified By | UserId() on modify, read-only
+| modifiedAt | Modified At | On modify, read-only
+| lastModifiedDateTime | SystemModifiedAt | For sync
+|===
+
+Key on (Note Date, Resource No.) for Thyme's date-range reads. Security (codeunit `Thyme Record
+Security`): every Thyme user reads them; insert, modify and delete need `CanEditPlan`, checked in
+the API page's triggers: a user with permission to write Job Planning Lines
+(`JobPlanningLine.WritePermission()`); being a Thyme administrator or the AI agent doesn't count on
+its own, so Thyme never offers an edit BC would refuse. The read-only
+`canEditPlan` field on the Projects and Resources APIs gives the same answer per caller, so Thyme
+can show or hide its edit controls. `THYME USER` grants direct read and indirect insert, modify
+and delete (`Rimd`), and the API page has `Permissions = tabledata "Thyme Day Note" = rimd`, so a
+planner with only `THYME USER` can write through the page once the code check passes, but not
+directly (for example through a configuration package).
+
+=== Plan Reviews API (Page 50118)
+
+Maps to the `Thyme Plan Review` table (table 50107): an AI review of the plan (Resource planning
+lines with quantity > 0) for one subject-week, a resource-week or a project-week (enum
+`Thyme Plan Review Subject`, 50107).
+
+[cols="1,1,3"]
+|===
+| API Field | BC Field | Notes
+
+| id | SystemId | OData key
+| entryNo | Entry No. | AutoIncrement, read-only
+| subjectType | Subject Type | Resource or Project
+| subjectNo | Subject No. | Code[20]; TableRelation Resource or Job by Subject Type
+| weekStart | Week Start | Must be a Monday
+| planHash | Plan Hash | Text[64]: lowercase hex SHA-256 of the canonical plan, `PENDING` while being written
+| verdict | Verdict | Enum `Thyme Review Verdict` (50100); defaults to Check
+| summary | Summary | Text[2048]
+| reviewer | Reviewer | Text[100]
+| reviewedAt | Reviewed At | Defaults to now on insert
+| lastModifiedDateTime | SystemModifiedAt | For sync
+|===
+
+Keys on (Subject Type, Subject No., Week Start, Reviewed At) for "latest review of a
+subject-week" and (Subject Type, Week Start) for Thyme's visible weeks. The agent writes
+commit-last: the header with Plan Hash `PENDING`, then findings and changes, then the real hash.
+Deleting a review deletes its findings and changes. Once a review has findings or changes, its
+Subject Type, Subject No. and Week Start can't be changed (they were validated against it).. Findings and
+changes lock their parent review (and a change its finding) with an update lock while they are
+validated, and a review or finding locks itself before checking or deleting its children, so a
+concurrent PATCH or delete can't slip between the check and the commit.
+Changing a key (a PATCH of `reviewEntryNo`, `lineNo` or `changeNo`) is refused on reviews, findings
+and changes alike (OnRename), since it would skip those checks: delete and recreate instead.
+
+The canonical plan: for each line build `jobNo|jobTaskNo|resourceNo|planningDate|hours`
+(date as YYYY-MM-DD, hours = the quantity in hours rounded to and written with 2 decimals),
+sort ascending, join with a newline and hash the UTF-8; an empty week hashes the empty string.
+Thyme computes the same hash to show a review as out of date.
+
+=== Plan Review Lines API (Page 50119)
+
+Maps to `Thyme Plan Review Line` (table 50108), PK (Review Entry No., Line No.); Line No. in
+steps of 10000, assigned when 0. Fields: `reviewEntryNo`, `lineNo`, `severity` (enum
+`Thyme Review Severity`, 50101), `check` (Code[30]: ROUNDING, OVER_CAPACITY, BILLABLE_TARGET,
+CALENDAR, BUDGET_BURN, PLAN_SHAPE, OUTSIDE_PROJECT_DATES, OTHER; not validated, so new checks
+need no extension change), `planningDate` (optional, within the review's week; blank = whole
+week), `jobNo`, `resourceNo` (optional), `note` (Text[500]), and read-only `appliedAt` / `appliedBy`
+(Applied At, Applied By: stamped when its changes are applied). Deleting a finding deletes its changes.
+
+=== Plan Review Changes API (Page 50120)
+
+Maps to `Thyme Plan Review Change` (table 50109), PK (Review Entry No., Review Line No., Change
+No.); Change No. assigned 1, 2, 3... when 0. A proposed change to one planning-line cell: `jobNo`,
+`jobTaskNo`, `resourceNo`, `planningDate`, `currentHours` and `proposedHours` (hours, 2 decimals,
+not negative; proposed a multiple of 0.25, 0 = remove the cell's lines). The finding must exist,
+the day must be in the review's week, and the change must be for the review's resource
+(resource-week) or project (project-week).
+
+==== Applying a finding (applyChanges)
+
+`POST .../planReviewLines({id})/Microsoft.NAV.applyChanges` (bound action, no body) runs codeunit
+50107 `Thyme Plan Review Apply`, which applies all of the finding's changes in one transaction:
+
+. `CanEditPlan()` (permission to write Job Planning Lines), else "You don't have permission to change the plan."
+. Lock the review and the finding (update lock, held until commit), then read the finding's changes
+  once, with an update lock, into a temporary snapshot that everything below works from. There must
+  be some, else "Finding <lineNo> of plan review <entryNo> has no changes to apply."; and no two may
+  be for the same cell, else "Edit this cell by hand: the finding changes the same cell twice."
+. Take an update lock on each affected project's Job row (in project order), so applies on the same
+  project run one at a time, and lock Job Planning Line.
+. For each change, the cell's lines (Job No., Job Task No., Type Resource, No. = Resource No.,
+  Planning Date, Quantity <> 0) must be none or one Budget line whose unit is the resource's base
+  unit (or blank), else "Edit this cell by hand: ..." (several lines, a line that isn't Budget, or a
+  line in another unit); and the cell's hours must be within 0.005 of Current Hours, else "The plan
+  changed since Poppie looked. Ask her to re-review."
+. Only when every cell passes, apply each, re-checking the cell immediately before writing it
+  (any difference: "The plan changed since Poppie looked..."). The write goes to exactly the line
+  that check found, re-read by its key and confirmed unchanged (Budget, quantity, unit), never a
+  fresh lookup; afterwards the cell must hold just the expected lines (one, or none for 0 hours),
+  so a line someone else added meanwhile also raises "The plan changed..." and rolls back.
+  Proposed Hours 0 deletes the line; an existing line gets
+  `Validate(Quantity, proposed hours / hours per unit)` and `Modify(true)`; an empty cell gets a new
+  Budget line (next Line No. in the task, the project's currency, `Validate("No.")`, `Validate(Quantity)`,
+  `Insert(true)`).
+. Stamp the finding's Applied At / Applied By.
+
+The Job Planning Lines API takes the same update lock on the line's Job row when it inserts,
+modifies or deletes a line, so it and `applyChanges` change a project's plan one at a time.
+
+Any error rolls the whole transaction back. Hours per unit: the resource's `HOUR` unit of measure
+factor when it exists and isn't 1 (the base unit is a day of that many hours, or 1/factor when the
+factor is below 1); otherwise 1. Lines in another unit of measure are refused rather than converted,
+because Thyme's Plan grid and the review's Current Hours both assume the base unit. The codeunit's Permissions property gives indirect access to the
+planning lines and the review tables; `THYME USER` grants indirect modify on findings for the stamp,
+and the `CanEditPlan` check gates the planning-line writes, so only people who may change the plan
+succeed.
+
+=== Plan Review Requests API (Page 50121)
+
+Maps to `Thyme Plan Review Request` (table 50110), modelled on the Suggestion Requests API:
+`subjectType`, `subjectNo`, `weekStart` (a Monday), `status` (enum `Thyme Plan Review Req.
+Status`, 50108: Requested, forced on insert, Running, Done, Failed), `progress`, `errorMessage`
+(Text[250]), `requestedBy`/`requestedAt` (set on insert, read-only), `startedAt`/`finishedAt`
+(stamped if blank when the status leaves Requested / reaches Done or Failed). One open request per
+subject-week: a second Requested or Running one is rejected on insert and on re-opening; the check
+locks the subject's Resource or Job row first so two simultaneous inserts can't both pass. Keys on
+(Subject Type, Subject No., Week Start, Status) and (Status, Requested At).
+
+Security for plan reviews, findings, changes and requests (codeunit `Thyme Record Security`):
+every Thyme user reads them (no row-level security in v1). Reviews, findings and changes are
+written only by the AI agent or a Thyme administrator (`CheckCanWritePlanReviews`). The agent has
+direct RIMD; `THYME ADMIN` has indirect insert, modify and delete, and the three API pages (and the
+review and finding tables, for their cascading deletes) carry the matching `Permissions`, so an
+administrator writes them only through the API. Requests are
+created by people who may change the plan (`CanEditPlan`: permission to write Job Planning
+Lines, `JobPlanningLine.WritePermission()`, with no administrator or AI agent shortcut) and changed or
+deleted only by the AI agent. The read-only `canEditPlan` field on the Projects and Resources APIs
+gives the same answer per caller, for *Apply change* and *Ask Poppie to re-review*. `THYME USER` has
+direct read and only indirect insert on requests (`Ri`), and the requests page grants `i`, so a request
+can only be created through the page and its check, not directly (for example a configuration package).
+
+=== Timesheet Review Requests API (Page 50124)
+
+Maps to `Thyme Timesheet Review Request` (table 50113), modelled on the Plan Review Requests API:
+`timeSheetNo` (Code[20], relation to Time Sheet Header), `status` (enum `Thyme TS Review Req.
+Status`, 50109: Requested, forced on insert, Running, Done, Failed), `progress`, `errorMessage`
+(Text[250]), `requestedBy`/`requestedAt` (set on insert, read-only), `startedAt`/`finishedAt`
+(stamped if blank when the status leaves Requested / reaches Done or Failed). One open request per
+time sheet: a second Requested or Running one is rejected on insert and on re-opening; the check
+locks the Time Sheet Header row first so two simultaneous inserts can't both pass. Keys on
+(Time Sheet No., Status) and (Status, Requested At). Thyme uses it for *Ask Poppie to look again*;
+the agent writes the resulting review to `timesheetReviews` as usual.
+
+Security (codeunit `Thyme Record Security`): requests follow the time sheet's reviews, not the plan's,
+because the review they produce is only visible to the time sheet's owner and approver. Read: the
+time sheet's owner and approver, Thyme administrators and the AI agent
+(`ApplyTimesheetReviewRequestFilter`, the same FlowField filters as reviews). Create: the same
+people, for that time sheet (`CheckCanRequestTimesheetReview`; the time sheet must exist). Change or
+delete: only the AI agent (`CheckCanChangeTimesheetReviewRequests`). `THYME USER` has direct read and
+only indirect insert (`Ri`), and the page grants `i`, so a request can only be created through the
+page and its check; `THYME AI AGENT` has RIMD.
+
+=== Thyme Setup API (Page 50112)
+
+Maps to the extension's `Thyme Setup` table (table 50103), a single record with a blank
+primary key. Insert and delete are not allowed; read with `GET /thymeSetup` and update with
+`PATCH /thymeSetup({id})`.
+
+[cols="1,1,1", options="header"]
+|===
+| API Field | Table Field | Notes
+
+| id | SystemId | Primary key (GUID), read-only
+| defaultBillableTargetPercent | Default Billable Target % | 0-100, defaults to 75; used for people whose billableTargetSet is false
+| lastModifiedDateTime | SystemModifiedAt | For sync
+|===
+
+The install (codeunit 50101) and upgrade (codeunit 50102) codeunits create the record in
+every existing company, and codeunit 50103 subscribes to `OnCompanyInitialize` to create it
+in companies added later. As a fallback, the Thyme Setup page (50113) and the API page create
+it when opened by a user with write permission; a read-only user sees an empty result instead
+of an error.
+
+=== Users (Standard BC API)
+
+For user information, use BC's built-in https://learn.microsoft.com/en-us/dynamics365/business-central/dev-itpro/administration/api/dynamics_user_get[Automation API]:
+
+----
+GET /api/microsoft/automation/v2.0/companies({companyId})/users
+----
+
+Returns `userSecurityId`, `userName`, `displayName`, `state`, `expiryDate`, `contactEmail`.
+
+**Usage:** Match the user's `userName` to a Resource's `timeSheetOwnerUserId` field.
+
+== Object ID Ranges
+
+[cols="1,1", options="header"]
+|===
+| Object | ID
+
+| Thyme Projects API | Page 50100
+| Thyme Job Tasks API | Page 50101
+| Thyme Time Sheet API | Page 50102
+| Thyme Time Sheet Line API | Page 50103
+| Thyme Resources API | Page 50104
+| Thyme Time Entries API | Page 50105
+| Thyme Time Sheet Detail API | Page 50106
+| Thyme Job Planning Lines API | Page 50107
+| Thyme Resource UoM API | Page 50108
+| Thyme Timesheet Reviews API | Page 50109
+| Thyme TS Review Lines API | Page 50110
+| Thyme Time Suggestions API | Page 50111
+| Thyme Setup API | Page 50112
+| Thyme Setup | Page 50113
+| Thyme Suggestion Requests API | Page 50114
+| Thyme Agent Heartbeats API | Page 50115
+| Thyme Day Notes API | Page 50122
+| Thyme Plan Reviews API | Page 50118
+| Thyme Plan Review Lines API | Page 50119
+| Thyme Plan Review Changes API | Page 50120
+| Thyme Plan Review Requests API | Page 50121
+| Thyme TS Review Requests API | Page 50124
+| Thyme Timesheet Review | Table 50100
+| Thyme Timesheet Review Line | Table 50101
+| Thyme Time Suggestion | Table 50102
+| Thyme Setup | Table 50103
+| Thyme Suggestion Request | Table 50104
+| Thyme Agent Heartbeat | Table 50105
+| Thyme Day Note | Table 50111
+| Thyme Plan Review | Table 50107
+| Thyme Plan Review Line | Table 50108
+| Thyme Plan Review Change | Table 50109
+| Thyme Plan Review Request | Table 50110
+| Thyme Timesheet Review Request | Table 50113
+| Thyme Resource (extends Resource) | Table Extension 50100 (fields 50100-50104)
+| Thyme Resource Card (extends Resource Card) | Page Extension 50100
+| Thyme Review Verdict | Enum 50100
+| Thyme Review Severity | Enum 50101
+| Thyme Suggestion Source | Enum 50102
+| Thyme Suggestion Confidence | Enum 50103
+| Thyme Suggestion Status | Enum 50104
+| Thyme Suggestion Request Status | Enum 50105
+| Thyme Plan Review Subject | Enum 50107
+| Thyme Plan Review Req. Status | Enum 50108
+| Thyme TS Review Req. Status | Enum 50109
+| THYME AI AGENT | Permission Set 50100
+| THYME USER | Permission Set 50101
+| THYME ADMIN | Permission Set 50102
+| Thyme Time Sheet Actions | Codeunit 50100
+| Thyme Install | Codeunit 50101
+| Thyme Upgrade | Codeunit 50102
+| Thyme Company Initialize | Codeunit 50103
+| Thyme Record Security | Codeunit 50104
+| Thyme Source Link Events | Codeunit 50105
+| Thyme Connected Accounts | Codeunit 50106
+| Thyme Plan Review Apply | Codeunit 50107
+| (Reserved for future pages) | Page 50125-50199
+| Thyme Project Notes | Codeunit 50108
+| Thyme Project Customer | Codeunit 50109
+| (Reserved for future codeunits) | Codeunit 50110-50199
+|===
+
+== Security
+
+* APIs inherit BC's standard security model
+* Users need appropriate permissions on Job, Job Task, Time Sheet, Resource, and Job Ledger Entry tables
+* The extension's own tables (reviews, review lines, suggestions) are not covered by the standard D365 permission sets. Assign `THYME AI AGENT` to the AI agent's Microsoft Entra application (full access) and `THYME USER` to Thyme users (read reviews; read and update suggestions; read Thyme Setup). Assign `THYME ADMIN` to people who change the default billable target. Per-person targets are Resource fields, so they follow the standard Resource permissions
+* Row-level security (codeunit `Thyme Record Security`): a timesheet review and its lines are visible only to the time sheet's owner and approver, Thyme administrators (*Time Sheet Admin.* in User Setup, or `THYME ADMIN`) and the AI agent (`THYME AI AGENT`); a time suggestion only to its resource's time sheet owner, administrators and the AI agent; a suggestion request to its resource's time sheet owner and approver, administrators and the AI agent. Day notes are readable by every Thyme user and changed only by people who may change the plan (permission to write Job Planning Lines). Plan reviews, their findings, changes and requests are readable by every Thyme user; reviews are written only by the AI agent or administrators, and requests created by people who may change the plan. A timesheet review request is visible to, and can be created by, the time sheet's owner and approver, administrators and the AI agent; only the agent changes one. The API pages filter in SQL through FlowFields in filter group 2, so lists, `$filter` and by-id requests all respect it. Only the AI agent or an administrator can write reviews, and users can only create or change suggestions for resources they own. `SUPER` alone does not bypass these rules
+* OAuth 2.0 authentication via Azure AD
+* Supports both delegated and application permissions
+
+== Future Enhancements
+
+* **Time Entry Submission** - POST endpoint to submit new time entries to BC
+* **Webhook support** - Real-time notifications when projects or time sheets change
