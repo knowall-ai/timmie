@@ -1,0 +1,177 @@
+= Installation Guide
+:toc:
+
+== Prerequisites
+
+* Business Central online environment (Sandbox or Production)
+* Azure AD tenant with admin access
+* One of:
+** VS Code with AL Language extension (manual deployment)
+** GitHub account (automated deployment)
+
+== Option 1: Automated Deployment (GitHub Actions)
+
+=== Step 1: Fork or Clone Repository
+
+[source,bash]
+----
+git clone https://github.com/knowall-ai/timmie.git
+----
+
+=== Step 2: Create Azure AD App Registration
+
+1. Go to https://portal.azure.com[Azure Portal]
+2. Navigate to *Azure Active Directory* → *App registrations*
+3. Click *New registration*
+   * Name: `Thyme BC Extension Deployment`
+   * Supported account types: *Single tenant*
+4. After creation, note the *Application (client) ID*
+5. Go to *API permissions* → *Add a permission*
+   * Select *Dynamics 365 Business Central*
+   * Choose *Application permissions*
+   * Select `API.ReadWrite.All` and `Automation.ReadWrite.All`
+6. Click *Grant admin consent*
+7. Go to *Authentication* → *Add a platform* → *Web*
+   * Redirect URI: `https://businesscentral.dynamics.com/OAuthLanding.htm`
+   * Click *Configure*
+8. Go to *Certificates & secrets* → *New client secret*
+   * Description: `GitHub Actions`
+   * Expiry: 24 months
+   * Copy the secret value immediately
+
+=== Step 3: Authorize App in BC Admin Center
+
+1. Go to https://businesscentral.dynamics.com/admin[BC Admin Center]
+2. Navigate to *Microsoft Entra Apps* (in left sidebar)
+3. Click *+ Authorize Microsoft Entra app*
+4. Enter the Client ID from Step 2
+5. Click *Save*
+6. Click the *Grant* link next to the app to complete admin consent
+
+NOTE: The Grant link requires the *Cloud Application Administrator* role in Azure AD (not just Dynamics 365 Administrator). If Grant doesn't change to "Authorized", you may still proceed - the next step is required regardless.
+
+=== Step 4: Configure App in Business Central (Required for Automation API)
+
+IMPORTANT: This step is *in addition to* the BC Admin Center authorization. The BC Admin Center only authorizes tenant-level access. For the Automation API to work, you must also configure the app inside Business Central itself.
+
+1. Open your Business Central environment (Sandbox or Production)
+2. Search for *Microsoft Entra applications* (or "AAD Applications")
+3. Click *New* to create a new application
+4. Enter the *Client ID* from Step 2
+5. Fill in a *Description* (e.g., "Thyme BC Extension Deployment")
+6. Set *State* to *Enabled*
+7. In the *User Permission Sets* section, add these permission sets:
+   * `D365 AUTOMATION` - Required for Automation API access
+   * `EXTEN. MGT. - ADMIN` - Required for extension management
+8. Close the card
+
+To use the timesheet review, time suggestion and Thyme Setup endpoints, assign the extension's own permission sets as well (the standard D365 sets don't cover the extension's tables):
+
+* `THYME AI AGENT` - to the AI agent's Microsoft Entra application (full access to reviews and suggestions)
+* `THYME USER` - to Thyme users (read reviews; read and update suggestions; read the default billable target)
+* `THYME ADMIN` - to Thyme administrators who change the default billable target or need to see every user's reviews and suggestions (includes `THYME USER`)
+
+Thyme users only see reviews of time sheets they own or approve, and suggestions for resources whose time sheets they own. Users with *Time Sheet Admin.* ticked in *User Setup* see everything, like `THYME ADMIN`.
+
+TIP: Without this step, you will get `Authentication_InvalidCredentials` errors even if the Azure AD app has correct permissions and BC Admin Center shows the app.
+
+See https://learn.microsoft.com/en-us/dynamics365/business-central/dev-itpro/administration/automation-apis-using-s2s-authentication[Microsoft S2S Authentication Docs] for more details.
+
+=== Step 5: Configure GitHub Secrets
+
+In your GitHub repository settings:
+
+1. Go to *Settings* → *Environments*
+2. Create environment: `bc-sandbox` (and `bc-production` for production deploys)
+3. Add secrets:
+   * `BC_TENANT_ID` - Your Azure AD tenant ID
+   * `BC_CLIENT_ID` - App registration client ID
+   * `BC_CLIENT_SECRET` - App registration client secret
+4. Repeat for `bc-production`
+
+=== Step 6: Trigger Deployment
+
+Push to `main` branch triggers Sandbox deployment:
+
+[source,bash]
+----
+git push origin main
+----
+
+Create a release for Production deployment:
+
+[source,bash]
+----
+gh release create bc-v1.0.0 --title "Initial Release" --notes "First production deployment"
+----
+
+== Option 2: Manual Deployment (VS Code)
+
+=== Step 1: Install Prerequisites
+
+1. Install https://code.visualstudio.com/[VS Code]
+2. Install https://marketplace.visualstudio.com/items?itemName=ms-dynamics-smb.al[AL Language extension]
+
+=== Step 2: Open Project
+
+[source,bash]
+----
+git clone https://github.com/knowall-ai/timmie.git
+code timmie/bc-extension
+----
+
+=== Step 3: Download Symbols
+
+1. Press `Ctrl+Shift+P`
+2. Type `AL: Download Symbols`
+3. Enter BC environment credentials when prompted
+
+=== Step 4: Deploy
+
+1. Update `.vscode/launch.json` with your environment name
+2. Press `F5` to deploy
+
+== Option 3: Upload .app File Manually
+
+=== Step 1: Build the Extension
+
+[source,bash]
+----
+# In VS Code, press Ctrl+Shift+B
+# Or use command line with AL compiler
+----
+
+=== Step 2: Upload via BC Admin Center
+
+1. Go to https://businesscentral.dynamics.com/admin[BC Admin Center]
+2. Select your environment
+3. Navigate to *Extensions* → *Manage* → *Upload Extension*
+4. Select the `.app` file
+5. Click *Deploy*
+
+== Verification
+
+After installation, verify the API is accessible:
+
+[source,bash]
+----
+curl -H "Authorization: Bearer {token}" \
+  "https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/knowall/thyme/v1.0/companies({companyId})/projects"
+----
+
+Expected: JSON response with project data including `billToCustomerName` field.
+
+== Uninstallation
+
+=== Via BC Admin Center
+
+1. Go to *Extensions* → *Manage*
+2. Find *Thyme BC API Extension*
+3. Click *Uninstall*
+
+=== Via PowerShell
+
+[source,powershell]
+----
+Uninstall-NAVApp -ServerInstance BC -Name "Thyme BC API Extension" -Publisher "KnowAll"
+----

@@ -426,4 +426,4 @@ The project page's *Print* button prints a customer-friendly report (choose "Sav
 
 * link:SOLUTION_DESIGN.adoc[Solution Design] - Architecture overview
 * link:TROUBLESHOOTING.adoc[Troubleshooting] - Common issues and solutions
-* https://github.com/knowall-ai/timmie-bc-extension[Timmie BC Extension] - Business Central extension repository
+* https://github.com/knowall-ai/timmie/tree/main/bc-extension[Timmie BC Extension] - Business Central extension repository

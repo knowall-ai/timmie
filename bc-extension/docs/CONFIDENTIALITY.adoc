@@ -1,0 +1,3 @@
+== Confidentiality Statement
+
+This document contains confidential and proprietary information belonging to KnowAll AI. The information disclosed herein is intended solely for authorized personnel involved in the Thyme time tracking project and the operation of the associated Business Central extension. Distribution outside of these authorized parties requires explicit consent from KnowAll AI.

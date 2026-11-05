@@ -1,0 +1,107 @@
+name: Deploy BC extension to Production (KnowAll)
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    # Web releases are tagged v*, BC extension releases bc-v*. Only deploy the extension for its own.
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'bc-v')
+    runs-on: windows-latest
+    environment: bc-production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install BcContainerHelper
+        shell: powershell
+        run: |
+          Install-Module BcContainerHelper -Force -AllowClobber
+          Import-Module BcContainerHelper
+
+      - name: Build and Deploy to Production
+        shell: powershell
+        env:
+          BC_TENANT_ID: ${{ secrets.BC_TENANT_ID }}
+          BC_CLIENT_ID: ${{ secrets.BC_CLIENT_ID }}
+          BC_CLIENT_SECRET: ${{ secrets.BC_CLIENT_SECRET }}
+        run: |
+          $project = Join-Path $env:GITHUB_WORKSPACE "bc-extension"
+          $secureSecret = ConvertTo-SecureString $env:BC_CLIENT_SECRET -AsPlainText -Force
+
+          $authContext = New-BcAuthContext `
+            -tenantID $env:BC_TENANT_ID `
+            -clientID $env:BC_CLIENT_ID `
+            -clientSecret $secureSecret
+
+          Write-Host "Authenticated successfully"
+
+          # Get sandbox artifact matching BC Online version
+          $artifactUrl = Get-BCArtifactUrl -type Sandbox -country gb -select Latest
+          Write-Host "Using artifact: $artifactUrl"
+
+          # Create compiler folder from artifacts
+          $compilerFolder = New-BcCompilerFolder -artifactUrl $artifactUrl -cacheFolder "c:\bccompiler"
+          Write-Host "Compiler folder: $compilerFolder"
+
+          # Find alc.exe in the compiler folder
+          $alcExe = Join-Path $compilerFolder "extension\bin\win32\alc.exe"
+          if (-not (Test-Path $alcExe)) {
+            $alcExe = Join-Path $compilerFolder "extension\bin\alc.exe"
+          }
+          if (-not (Test-Path $alcExe)) {
+            # Search recursively
+            $alcExe = (Get-ChildItem -Path $compilerFolder -Filter "alc.exe" -Recurse | Select-Object -First 1).FullName
+          }
+          Write-Host "ALC path: $alcExe"
+
+          # Get symbols from the compiler folder
+          $symbolsFolder = Join-Path $compilerFolder "symbols"
+          Write-Host "Symbols folder: $symbolsFolder"
+          Get-ChildItem $symbolsFolder -Filter "*.app" | ForEach-Object { Write-Host "  - $($_.Name)" }
+
+          # Create output folder
+          $outputFolder = Join-Path $env:GITHUB_WORKSPACE "output"
+          New-Item -ItemType Directory -Path $outputFolder -Force | Out-Null
+
+          # Compile the app
+          Write-Host "Compiling app..."
+          $appJsonPath = Join-Path $project "app.json"
+          $appJson = Get-Content $appJsonPath | ConvertFrom-Json
+          $appFileName = "$($appJson.publisher)_$($appJson.name)_$($appJson.version).app"
+          $appFilePath = Join-Path $outputFolder $appFileName
+
+          & $alcExe /project:$project /packagecachepath:$symbolsFolder /out:$appFilePath /assemblyprobingpaths:$compilerFolder
+
+          if (Test-Path $appFilePath) {
+            Write-Host "Built app: $appFilePath"
+          } else {
+            Write-Host "Looking for any .app file in output..."
+            Get-ChildItem $outputFolder
+            throw "Failed to compile app"
+          }
+
+          # Deploy to Production
+          Write-Host "Publishing to Production..."
+
+          # Fix the apiBaseUrl to include tenant ID (without /v2.0 - the function adds that)
+          $authContext.apiBaseUrl = "https://api.businesscentral.dynamics.com/$($env:BC_TENANT_ID)"
+          Write-Host "API Base URL: $($authContext.apiBaseUrl)"
+
+          Publish-PerTenantExtensionApps `
+            -bcAuthContext $authContext `
+            -environment "Production" `
+            -appFiles $appFilePath `
+            -schemaSyncMode Force
+
+          Write-Host "Deployed to Production successfully!"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: timmie-bc-extension-production
+          path: 'output/*.app'
+          if-no-files-found: warn

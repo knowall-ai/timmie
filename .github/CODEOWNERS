@@ -12,3 +12,6 @@
 
 # Default owner — applies to the entire repo
 *   @EdiWeeks
+
+# Business Central extension
+/bc-extension/ @BenGWeeks

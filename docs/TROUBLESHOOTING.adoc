@@ -78,7 +78,7 @@ Common issues and their solutions. Add new entries as problems are discovered an
 | A timesheet must be created in BC before users can enter time for a week. Contact your timesheet manager to create timesheets for you. See Issue #61 for manager timesheet creation feature.
 
 | "Timmie BC Extension is not installed" error
-| The Timesheet API requires the Timmie BC Extension to be installed. Install from https://github.com/knowall-ai/timmie-bc-extension
+| The Timesheet API requires the Timmie BC Extension to be installed. Install from https://github.com/knowall-ai/timmie/tree/main/bc-extension
 
 | Timesheet shows as read-only
 | Timesheets become read-only once submitted for approval. If rejected, click "Reopen for Editing" to make changes.
@@ -90,10 +90,10 @@ Common issues and their solutions. Add new entries as problems are discovered an
 | Your user account must have a matching Resource record in BC with a valid email address. Contact your BC administrator.
 
 | "Resource Record Not Found" but BC extension check passes
-| The extension's `/resources` API endpoint may not exist. This happens when using an older extension version or when the extension isn't fully installed. Reinstall the latest Timmie BC Extension from https://github.com/knowall-ai/timmie-bc-extension
+| The extension's `/resources` API endpoint may not exist. This happens when using an older extension version or when the extension isn't fully installed. Reinstall the latest Timmie BC Extension from https://github.com/knowall-ai/timmie/tree/main/bc-extension
 
 | "Poppie's suggestions" panel doesn't appear under the week on the Time page
-| The panel only shows when the Timmie BC Extension has the `timeSuggestions` API; with an older extension it is hidden. Upgrade to the latest Timmie BC Extension from https://github.com/knowall-ai/timmie-bc-extension. If the panel shows but stays empty, Poppie hasn't written any suggestions for that person and week yet, or a suggestion matches an entry already in the week (those are hidden).
+| The panel only shows when the Timmie BC Extension has the `timeSuggestions` API; with an older extension it is hidden. Upgrade to the latest Timmie BC Extension from https://github.com/knowall-ai/timmie/tree/main/bc-extension. If the panel shows but stays empty, Poppie hasn't written any suggestions for that person and week yet, or a suggestion matches an entry already in the week (those are hidden).
 
 | Poppie's suggestions show but have no Add button
 | Suggestions can only be added to an open (or rejected) timesheet of your own. Reopen a submitted timesheet first; approved timesheets and teammates' timesheets are read-only, and the panel says why.
@@ -120,7 +120,7 @@ Common issues and their solutions. Add new entries as problems are discovered an
 | Upgrade to the latest Timmie version. Earlier versions measured the list against the Plan (Budget lines) rather than the Estimate (the quoted time on Billable lines) and only counted timesheets from the last six months, so the figures differed. The list now works them out exactly as the project page does, and its bar shows the time by stage (Posted, Approved, Submitted, Unsubmitted). Hover over the bar to see the hours in each stage.
 
 | There's no *Linked sources* card on the project page
-| The card needs Timmie BC Extension 1.20 or later (the `projectSourceLinks` API); on older versions it's hidden. Upgrade the extension from https://github.com/knowall-ai/timmie-bc-extension.
+| The card needs Timmie BC Extension 1.20 or later (the `projectSourceLinks` API); on older versions it's hidden. Upgrade the extension from https://github.com/knowall-ai/timmie/tree/main/bc-extension.
 
 | *Linked sources* shows the links but no *Add link*, edit or remove buttons
 | Only a Timmie administrator (*Time Sheet Admin.* in User Setup, or the `THYME ADMIN` permission set) or the project's manager can change them. The manager is the project's *Project Manager* user, or the person whose resource is its *Person Responsible* (their *Time Sheet Owner User ID* on the Resource card). Ask one of them, or edit the links in Business Central on the Project Card (*Thyme Linked Sources*), where the same rule applies.
@@ -192,10 +192,10 @@ Common issues and their solutions. Add new entries as problems are discovered an
 | The person is over-allocated that day across *all* projects, not just the one shown. Hover the cell for the total planned hours, how many projects they span, the person's daily capacity and a per-project breakdown. Capacity is the person's hours per day from their units of measure in Business Central (e.g. 7.5h), or 8h when none is set; see the DAY/HOUR unit-of-measure entry above to set it. People with their own weekly capacity (e.g. 15h for two days a week) are also flagged from the day their week so far goes over it. Move or reduce some of that day's allocations to clear the outline.
 
 | Day notes don't appear on the Plan, or clicking a date does nothing
-| Day notes need Timmie BC Extension 1.22.0.0 or later (the `dayNotes` API); with older versions they're hidden and the dates in the Plan header aren't clickable. Upgrade the extension from https://github.com/knowall-ai/timmie-bc-extension, then reload the Plan.
+| Day notes need Timmie BC Extension 1.22.0.0 or later (the `dayNotes` API); with older versions they're hidden and the dates in the Plan header aren't clickable. Upgrade the extension from https://github.com/knowall-ai/timmie/tree/main/bc-extension, then reload the Plan.
 
 | The day notes popover has no *Add note*, edit or delete buttons, or saving a note says "You don't have permission to change day notes."
-| Only people who can write planning lines (Job Planning Line) in Business Central, Timmie administrators and the AI agent can change day notes; everyone else sees them read-only. Ask a BC administrator to give the user permission to modify Job Planning Lines (or the `THYME ADMIN` permission set). Timmie reads this from `canEditPlan` on the projects and resources APIs, so reload the Plan after the permission changes.
+| Only people who can write planning lines (Job Planning Line) in Business Central can change day notes; everyone else, including Timmie administrators and the AI agent, sees them read-only. Ask a BC administrator to give the user permission to modify Job Planning Lines (the `THYME ADMIN` permission set doesn't grant this). Timmie reads this from `canEditPlan` on the projects and resources APIs, so reload the Plan after the permission changes.
 
 | A Plan cell has a red outline on a hatched day, though the hours are within the person's day
 | The day has a *No project work* note (for everyone, or that person), e.g. an off-site, so any hours planned on it count as over capacity. Hover the cell for the note. Move the allocation to another day, or edit the note in the date's popover and untick *No project work* if the day is available after all.

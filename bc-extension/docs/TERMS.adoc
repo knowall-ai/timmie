@@ -1,0 +1,11 @@
+== General Terms & Conditions
+
+This technical solution document is provided by KnowAll AI for the Thyme BC Extension project. The information contained herein is proprietary and confidential and is shared under the terms of the project agreement between KnowAll AI and the operating customer.
+
+**Scope of Document:** This document covers the technical implementation, architecture, and operational guidance for the Thyme BC Extension — a Microsoft Dynamics 365 Business Central AL extension that exposes custom API endpoints used by the Thyme time tracking application.
+
+**Limitations:** This document reflects the system state at the time of its generation. Any subsequent modifications, enhancements, or integrations may require updates to this documentation. The most authoritative source of behaviour is always the AL source under `src/` in the repository.
+
+**Support and Maintenance:** For technical support, system modifications, or clarifications regarding this document, please contact the KnowAll AI delivery team through the established support channels or by emailing support@knowall.ai.
+
+**Intellectual Property:** All extension code, custom AL objects, custom APIs, and technical implementations described in this document remain the intellectual property of KnowAll AI unless otherwise specified in the project agreement. Microsoft Dynamics 365 Business Central, its objects, and its standard APIs remain the property of Microsoft Corporation.

@@ -1,0 +1,24 @@
+# AL Language / Business Central
+.alpackages/
+.snapshots/
+*.app
+
+# VS Code
+.vscode/*.code-workspace
+
+# Build output
+output/
+
+# Environment files (secrets)
+.env
+.env.local
+.env.*.local
+*.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Generated documentation
+docs/TECHNICAL_SOLUTION_DOCUMENT.pdf
+docs/.asciidoctor/

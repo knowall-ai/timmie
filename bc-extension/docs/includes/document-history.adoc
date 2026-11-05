@@ -1,0 +1,13 @@
+// Document history for the Thyme BC Extension Technical Solution Document.
+// Update this table whenever the bound .adoc files have material changes
+// that warrant a new version stamp.
+
+[cols="1,2,2,4",options="header"]
+|===
+|Version |Date |Author |Changes
+
+|1.0 |2026-05-01 |Ben Weeks
+|Initial compiled Technical Solution Document for the Thyme BC Extension.
+Pulls together the existing Solution Design, Installation, Deployment, Testing,
+and Troubleshooting guides plus a new FAQ appendix into a single deliverable PDF.
+|===

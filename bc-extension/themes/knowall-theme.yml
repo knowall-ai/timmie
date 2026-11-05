@@ -1,0 +1,151 @@
+extends: default
+
+labels:
+  chapter: ~
+  part: ~
+  appendix: Resource
+
+page:
+  size: A4
+  layout: portrait
+  margin: [0.75in, 1in, 0.75in, 1in]
+
+base:
+  font_family: Helvetica
+  font_size: 10
+  line_height: 1.4
+  text_align: left
+
+header:
+  font_family: Helvetica
+  font_size: 10
+  height: 0.5in
+  line_height: 1
+  vertical_align: bottom
+  recto:
+    left:
+      content: ~
+    center:
+      content: ~
+    right:
+      content: CONFIDENTIAL
+  verso:
+    left:
+      content: ~
+    center:
+      content: ~
+    right:
+      content: CONFIDENTIAL
+
+footer:
+  font_family: Helvetica
+  font_size: 10
+  height: 0.5in
+  line_height: 1
+  vertical_align: bottom
+  recto:
+    left:
+      content: ~
+    center:
+      content: ~
+    right:
+      content: '{page-number}'
+  verso:
+    left:
+      content: ~
+    center:
+      content: ~
+    right:
+      content: '{page-number}'
+
+title_page:
+  font_family: Helvetica
+  background_image: knowall-sidebar.png
+  background_fit: cover
+  title:
+    top: 45%
+    left: 45%
+    font_size: 22
+    font_color: 333333
+    font_style: normal
+    line_height: 1.3
+    align: left
+  subtitle:
+    font_size: 12
+    font_color: 666666
+    font_style: normal
+    line_height: 1.4
+    margin_top: 8
+
+chapter:
+  font_family: Helvetica
+  font_size: 16
+  align: left
+  display_label: false
+
+heading:
+  font_family: Helvetica
+  h1_font_size: 16
+  h2_font_size: 14
+  h3_font_size: 12
+  h4_font_size: 11
+  h5_font_size: 10
+  h6_font_size: 10
+
+list:
+  font_family: Helvetica
+  indent: 20
+  item_spacing: 4
+
+ulist:
+  font_family: Helvetica
+  marker_font_size: 10
+  text_indent: 15
+  marker_indent: 0
+
+olist:
+  font_family: Helvetica
+  marker_font_size: 10
+  text_indent: 15
+  marker_indent: 0
+
+table:
+  font_family: Helvetica
+  width: 100%
+  font_size: 9
+  cell_padding: 3
+  head:
+    font_family: Helvetica
+    font_style: bold
+    font_size: 9
+  body:
+    font_family: Helvetica
+    font_size: 9
+
+code:
+  font_family: Courier
+  font_size: 9
+  background_color: f5f5f5
+  border_color: cccccc
+  border_width: 0.5
+
+codespan:
+  font_family: Courier
+  font_size: 9
+
+sidebar:
+  font_family: Helvetica
+  font_size: 10
+
+admonition:
+  font_family: Helvetica
+  font_size: 10
+
+quote:
+  font_family: Helvetica
+  font_size: 10
+
+toc:
+  font_family: Helvetica
+  font_size: 10
+  line_height: 1.4

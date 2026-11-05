@@ -13,7 +13,7 @@
 
 Timmie detects what the installed Timmie BC Extension supports and hides features it doesn't, so
 an older extension keeps working without them. Install the latest version from
-https://github.com/knowall-ai/timmie-bc-extension in every environment Timmie uses.
+https://github.com/knowall-ai/timmie/tree/main/bc-extension in every environment Timmie uses.
 
 |===
 | Feature | Needs

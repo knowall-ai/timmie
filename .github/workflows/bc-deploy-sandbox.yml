@@ -1,0 +1,231 @@
+name: Deploy BC extension to Sandbox (Contoso)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'bc-extension/**'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: windows-latest
+    environment: bc-sandbox
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install BcContainerHelper
+        shell: powershell
+        run: |
+          Install-Module BcContainerHelper -Force -AllowClobber
+          Import-Module BcContainerHelper
+
+      - name: Build and Deploy to Sandbox
+        shell: powershell
+        env:
+          BC_TENANT_ID: ${{ secrets.BC_TENANT_ID }}
+          BC_CLIENT_ID: ${{ secrets.BC_CLIENT_ID }}
+          BC_CLIENT_SECRET: ${{ secrets.BC_CLIENT_SECRET }}
+        run: |
+          $project = Join-Path $env:GITHUB_WORKSPACE "bc-extension"
+
+          # Get OAuth token directly with correct resource for BC API
+          # Using v1.0 endpoint with resource parameter (required for BC Online)
+          $tokenUrl = "https://login.microsoftonline.com/$($env:BC_TENANT_ID)/oauth2/token"
+          $tokenBody = @{
+            client_id = $env:BC_CLIENT_ID
+            client_secret = $env:BC_CLIENT_SECRET
+            resource = "https://api.businesscentral.dynamics.com"
+            grant_type = "client_credentials"
+          }
+
+          Write-Host "Getting OAuth token..."
+          try {
+            $tokenResponse = Invoke-RestMethod -Uri $tokenUrl -Method Post -Body $tokenBody -ContentType "application/x-www-form-urlencoded"
+            $accessToken = $tokenResponse.access_token
+            Write-Host "Got access token"
+
+            # Decode JWT to see claims (for debugging)
+            $tokenParts = $accessToken.Split('.')
+            # JWTs are Base64url: swap its two characters for standard Base64 before decoding
+            $payload = $tokenParts[1].Replace('-', '+').Replace('_', '/')
+            # Add padding if needed
+            $padding = 4 - ($payload.Length % 4)
+            if ($padding -ne 4) { $payload += '=' * $padding }
+            $decodedPayload = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($payload))
+            $claims = $decodedPayload | ConvertFrom-Json
+            Write-Host "Token audience (aud): $($claims.aud)"
+            Write-Host "Token app ID (appid): $($claims.appid)"
+            Write-Host "Token roles: $($claims.roles -join ', ')"
+            Write-Host "Token tenant (tid): $($claims.tid)"
+          } catch {
+            Write-Host "Token Error: $($_.Exception.Message)"
+            $errorBody = $_.ErrorDetails.Message
+            Write-Host "Error Details: $errorBody"
+            throw
+          }
+
+          Write-Host "Authenticated successfully"
+
+          # Get the BC Online environment info to determine correct artifact version
+          $environmentUrl = "https://api.businesscentral.dynamics.com/v2.0/$($env:BC_TENANT_ID)/Sandbox"
+
+          # Get sandbox artifact matching BC Online version (using UK locale to match target environment)
+          $artifactUrl = Get-BCArtifactUrl -type Sandbox -country gb -select Latest
+          Write-Host "Using artifact: $artifactUrl"
+
+          # Create compiler folder from artifacts
+          $compilerFolder = New-BcCompilerFolder -artifactUrl $artifactUrl -cacheFolder "c:\bccompiler"
+          Write-Host "Compiler folder: $compilerFolder"
+
+          # Find alc.exe in the compiler folder
+          $alcExe = Join-Path $compilerFolder "extension\bin\win32\alc.exe"
+          if (-not (Test-Path $alcExe)) {
+            $alcExe = Join-Path $compilerFolder "extension\bin\alc.exe"
+          }
+          if (-not (Test-Path $alcExe)) {
+            # Search recursively
+            $alcExe = (Get-ChildItem -Path $compilerFolder -Filter "alc.exe" -Recurse | Select-Object -First 1).FullName
+          }
+          Write-Host "ALC path: $alcExe"
+
+          # Get symbols from the compiler folder
+          $symbolsFolder = Join-Path $compilerFolder "symbols"
+          Write-Host "Symbols folder: $symbolsFolder"
+          Get-ChildItem $symbolsFolder -Filter "*.app" | ForEach-Object { Write-Host "  - $($_.Name)" }
+
+          # Create output folder
+          $outputFolder = Join-Path $env:GITHUB_WORKSPACE "output"
+          New-Item -ItemType Directory -Path $outputFolder -Force | Out-Null
+
+          # Compile the app
+          Write-Host "Compiling app..."
+          $appJsonPath = Join-Path $project "app.json"
+          $appJson = Get-Content $appJsonPath | ConvertFrom-Json
+          $appFileName = "$($appJson.publisher)_$($appJson.name)_$($appJson.version).app"
+          $appFilePath = Join-Path $outputFolder $appFileName
+
+          & $alcExe /project:$project /packagecachepath:$symbolsFolder /out:$appFilePath /assemblyprobingpaths:$compilerFolder
+
+          if (Test-Path $appFilePath) {
+            Write-Host "Built app: $appFilePath"
+          } else {
+            Write-Host "Looking for any .app file in output..."
+            Get-ChildItem $outputFolder
+            throw "Failed to compile app"
+          }
+
+          # Deploy to Sandbox using REST API directly (BcContainerHelper has tenant URL bug)
+          Write-Host "Publishing to Sandbox..."
+
+          $automationApiUrl = "https://api.businesscentral.dynamics.com/v2.0/$($env:BC_TENANT_ID)/Sandbox/api/microsoft/automation/v2.0"
+          Write-Host "Automation API URL: $automationApiUrl"
+
+          $headers = @{
+            "Authorization" = "Bearer $accessToken"
+            "Content-Type" = "application/json"
+          }
+
+          # First test: Try standard BC API to verify token works
+          $standardApiUrl = "https://api.businesscentral.dynamics.com/v2.0/$($env:BC_TENANT_ID)/Sandbox/api/v2.0"
+          Write-Host "Testing standard BC API: $standardApiUrl/companies"
+          try {
+            $testResponse = Invoke-RestMethod -Uri "$standardApiUrl/companies" -Headers $headers -Method Get
+            Write-Host "Standard API works! Found $($testResponse.value.Count) companies"
+          } catch {
+            Write-Host "Standard API also fails: $($_.Exception.Message)"
+            if ($_.Exception.Response) {
+              $errorStream = $_.Exception.Response.GetResponseStream()
+              $reader = New-Object System.IO.StreamReader($errorStream)
+              Write-Host "Standard API Error: $($reader.ReadToEnd())"
+            }
+          }
+
+          # Get companies via Automation API
+          Write-Host "Getting companies via Automation API..."
+          try {
+            $companiesResponse = Invoke-RestMethod -Uri "$automationApiUrl/companies" -Headers $headers -Method Get
+            $company = $companiesResponse.value | Select-Object -First 1
+            Write-Host "Using company: $($company.name) ($($company.id))"
+          } catch {
+            Write-Host "Companies API Error: $($_.Exception.Message)"
+            Write-Host "Status Code: $($_.Exception.Response.StatusCode.value__)"
+            $errorStream = $_.Exception.Response.GetResponseStream()
+            $reader = New-Object System.IO.StreamReader($errorStream)
+            $errorBody = $reader.ReadToEnd()
+            Write-Host "Error Body: $errorBody"
+            Write-Host ""
+            Write-Host "=== TROUBLESHOOTING ==="
+            Write-Host "The token is valid but BC rejected it. Please verify in BC Admin Center:"
+            Write-Host "1. Go to https://businesscentral.dynamics.com/admin"
+            Write-Host "2. Click 'Microsoft Entra Apps' in the left sidebar"
+            Write-Host "3. Verify your app is listed and shows 'Authorized' status"
+            Write-Host "4. If you see a 'Grant' link, click it to complete authorization"
+            Write-Host "========================"
+            throw
+          }
+
+          # Use BcContainerHelper's Publish-PerTenantExtensionApps (recommended for BC Online)
+          Write-Host "Publishing extension using Publish-PerTenantExtensionApps..."
+
+          # Create auth context for BcContainerHelper
+          $secureSecret = ConvertTo-SecureString $env:BC_CLIENT_SECRET -AsPlainText -Force
+          $authContext = New-BcAuthContext `
+            -tenantID $env:BC_TENANT_ID `
+            -clientID $env:BC_CLIENT_ID `
+            -clientSecret $secureSecret
+
+          Write-Host "Auth context created"
+
+          $environmentUrl = "https://businesscentral.dynamics.com/$($env:BC_TENANT_ID)/Sandbox"
+          Write-Host "Environment URL: $environmentUrl"
+
+          try {
+            Publish-PerTenantExtensionApps `
+              -bcAuthContext $authContext `
+              -environment "Sandbox" `
+              -appFiles $appFilePath `
+              -schemaSyncMode Force
+
+            Write-Host "Deployed to Sandbox successfully!"
+          } catch {
+            Write-Host "Publish failed: $($_.Exception.Message)"
+            Write-Host ""
+            Write-Host "=== Checking Extension Deployment Status ==="
+
+            # Query extension deployment status via Automation API
+            try {
+              $statusUrl = "$automationApiUrl/companies($($company.id))/extensionDeploymentStatus"
+              Write-Host "Querying: $statusUrl"
+              $statusResponse = Invoke-RestMethod -Uri $statusUrl -Headers $headers -Method Get
+
+              # Show recent deployment attempts
+              $recentDeployments = $statusResponse.value | Sort-Object -Property startedOn -Descending | Select-Object -First 5
+              foreach ($deployment in $recentDeployments) {
+                Write-Host ""
+                Write-Host "--- Deployment: $($deployment.name) v$($deployment.extensionVersion) ---"
+                Write-Host "  Status: $($deployment.status)"
+                Write-Host "  Started: $($deployment.startedOn)"
+                Write-Host "  Operation: $($deployment.operationType)"
+                Write-Host "  App ID: $($deployment.appId)"
+                Write-Host "  Publisher: $($deployment.publishedAs)"
+                Write-Host "  Schedule: $($deployment.schedule)"
+                # Show all properties for debugging
+                Write-Host "  All properties:"
+                $deployment | ConvertTo-Json -Depth 3 | Write-Host
+              }
+            } catch {
+              Write-Host "Could not query deployment status: $($_.Exception.Message)"
+            }
+
+            throw "Extension deployment failed"
+          }
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: timmie-bc-extension-sandbox
+          path: 'output/*.app'
+          if-no-files-found: warn
