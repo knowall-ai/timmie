@@ -8,6 +8,7 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   InformationCircleIcon,
+  PaperAirplaneIcon,
   SpeakerWaveIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
@@ -17,6 +18,7 @@ import {
   PUBLIC_NOTICE,
   type PublicStatus,
 } from '@/services/public-timmie/shared';
+import { handOffToEnquiryForm } from './enquiry-handoff';
 import type { Message } from './PublicTimmieLauncher';
 import type { Persona } from './persona';
 import { ReplyText } from './ReplyText';
@@ -125,6 +127,27 @@ export function PublicTimmiePanel({
   const left = call.secondsLeft;
   const lastReply = [...messages].reverse().find((m) => m.role === 'assistant');
   const lastQuestion = [...messages].reverse().find((m) => m.role === 'user');
+
+  // "Send to the team": after a call, or once Timmie has pointed to the enquiry form.
+  const [handoff, setHandoff] = useState<'idle' | 'busy' | 'error'>('idle');
+  const afterCall = !inCall && !!call.lastCallKey;
+  const summariseCall = afterCall && !textTurns.some((m) => m.role === 'assistant');
+  const offerHandoff =
+    afterCall || (!!lastReply && !lastReply.via && lastReply.content.includes(ENQUIRY_PATH));
+  const sendToTeam = async () => {
+    if (handoff === 'busy') return;
+    setHandoff('busy');
+    try {
+      const summary = await transport.summarise(
+        textTurns,
+        summariseCall ? (call.lastCallKey ?? undefined) : undefined
+      );
+      handOffToEnquiryForm(summary);
+      setHandoff('idle');
+    } catch {
+      setHandoff('error');
+    }
+  };
   // Live caption first, then his last finished reply.
   const caption = (inCall && call.caption) || lastReply?.content || '';
   const statusLine =
@@ -180,6 +203,7 @@ export function PublicTimmiePanel({
               generation.current += 1;
               setMessages([]);
               setError(null);
+              setHandoff('idle');
               transport.reset();
             }}
             className="text-dark-400 rounded-md p-1.5 hover:text-white"
@@ -308,6 +332,35 @@ export function PublicTimmiePanel({
           <p className="mt-3 text-sm text-red-400" role="alert">
             {call.error || error}
           </p>
+        )}
+
+        {offerHandoff && (
+          <div className="border-dark-700 mt-4 border-t pt-3" data-testid="ask-timmie-handoff">
+            <button
+              type="button"
+              onClick={() => void sendToTeam()}
+              disabled={handoff === 'busy'}
+              data-testid="ask-timmie-send-to-team"
+              className="bg-brand text-brand-foreground hover:bg-brand-hover inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-semibold transition-colors disabled:opacity-60"
+            >
+              <PaperAirplaneIcon className="h-4 w-4" aria-hidden="true" />
+              {handoff === 'busy' ? 'Drafting…' : 'Send to the team'}
+            </button>
+            <p className="text-dark-400 mt-1.5 text-xs">
+              Opens the enquiry form with a short summary of this {summariseCall ? 'call' : 'chat'}{' '}
+              for you to check and edit. The form asks for your name and email; {persona.name} never
+              does.
+            </p>
+            {handoff === 'error' && (
+              <p className="mt-1 text-xs text-red-400" role="alert">
+                Couldn’t draft the summary just now. The{' '}
+                <Link href={ENQUIRY_PATH} className="text-brand underline underline-offset-2">
+                  enquiry form
+                </Link>{' '}
+                still works without it.
+              </p>
+            )}
+          </div>
         )}
       </div>
 

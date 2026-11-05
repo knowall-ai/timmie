@@ -20,6 +20,14 @@ export const PASS_HEADER = 'x-timmie-pass';
 /** Where the helper sends demos, hosting and support enquiries. */
 export const ENQUIRY_PATH = '/pricing#enquire';
 
+/**
+ * "Send to the team": the widget puts the server-written summary in sessionStorage under
+ * this key and raises this window event; the enquiry form reads one or the other into its
+ * message box (and clears the key). Same origin only; nothing is sent anywhere.
+ */
+export const ENQUIRY_PREFILL_KEY = 'ask-timmie:enquiry';
+export const ENQUIRY_PREFILL_EVENT = 'ask-timmie:enquiry';
+
 export interface PublicChatMessage {
   role: 'user' | 'assistant';
   content: string;

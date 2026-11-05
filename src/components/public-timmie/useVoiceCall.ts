@@ -8,7 +8,8 @@ export type CallStatus = 'idle' | 'connecting' | 'live';
 /**
  * A voice call through whichever VoiceAdapter it is given: status, speaking, live
  * caption, countdown and the one speaker mute. Finished replies are handed to
- * `onReply` for the transcript.
+ * `onReply` for the transcript. After a call, `lastCallKey` lets the widget ask the
+ * server for a summary of it ("Send to the team").
  */
 export function useVoiceCall(
   adapter: VoiceAdapter,
@@ -20,6 +21,7 @@ export function useVoiceCall(
   const [error, setError] = useState<string | null>(null);
   const [audioBlocked, setAudioBlocked] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  const [lastCallKey, setLastCallKey] = useState<string | null>(null);
   const call = useRef<VoiceCall | null>(null);
   const abort = useRef<AbortController | null>(null);
   const onReply = useRef(options.onReply);
@@ -41,6 +43,7 @@ export function useVoiceCall(
       if (abort.current) return;
       setError(null);
       setCaption('');
+      setLastCallKey(null);
       const controller = new AbortController();
       abort.current = controller;
       try {
@@ -51,6 +54,7 @@ export function useVoiceCall(
               if (s === 'ended') {
                 setStatus('idle');
                 setSecondsLeft(null);
+                if (call.current) setLastCallKey(call.current.key);
                 call.current = null;
                 abort.current = null;
               } else setStatus(s);
@@ -91,5 +95,16 @@ export function useVoiceCall(
 
   const resumeAudio = useCallback(() => void call.current?.resumeAudio(), []);
 
-  return { status, speaking, caption, error, audioBlocked, secondsLeft, start, stop, resumeAudio };
+  return {
+    status,
+    speaking,
+    caption,
+    error,
+    audioBlocked,
+    secondsLeft,
+    lastCallKey,
+    start,
+    stop,
+    resumeAudio,
+  };
 }

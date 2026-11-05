@@ -114,6 +114,7 @@ export function PublicTimmieLauncher({ persona = TIMMIE_PERSONA }: { persona?: P
     () =>
       createJsonChatTransport({
         url: '/api/public/chat',
+        summaryUrl: '/api/public/summary',
         passHeader: PASS_HEADER,
         getPass: () => getPass('chat'),
         clearPass: () => clearPass(),

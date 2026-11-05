@@ -29,6 +29,7 @@ export const TIMMIE_PERSONA: Persona = {
   greetingAudioSrc: (greeting) => greetingAudioSrc(greeting),
   chips: [
     'What is Timmie?',
+    'Would Timmie suit my team?',
     'How does it work with Business Central?',
     'Is it really free?',
     'What does the AI agent do?',

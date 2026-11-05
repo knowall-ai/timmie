@@ -81,6 +81,33 @@ describe('JSON chat transport', () => {
     ]);
   });
 
+  it('asks for a summary of the signed history, or of a call by its key', async () => {
+    const bodies: unknown[] = [];
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      bodies.push([url, JSON.parse(String(init.body))]);
+      return url.endsWith('/summary')
+        ? Response.json({ summary: 'We want a demo.' })
+        : Response.json({ reply: 'Hello', sig: 's', exp: 1, conversationId: 'conv-123456789' });
+    });
+    const transport = createJsonChatTransport({
+      url: '/api/public/chat',
+      summaryUrl: '/api/public/summary',
+      passHeader: 'h',
+      getPass: async () => 'p',
+      clearPass: () => undefined,
+      fallbackError: 'failed',
+    });
+    const history = [{ role: 'user' as const, content: 'Hi' }];
+    await transport.send(history);
+    expect(await transport.summarise(history)).toBe('We want a demo.');
+    expect(await transport.summarise([], 'call-key')).toBe('We want a demo.');
+    expect(bodies[1]).toEqual([
+      '/api/public/summary',
+      { conversationId: 'conv-123456789', messages: history },
+    ]);
+    expect(bodies[2]).toEqual(['/api/public/summary', { call: 'call-key' }]);
+  });
+
   it('surfaces the server error', async () => {
     vi.stubGlobal('fetch', async () => Response.json({ error: 'Too busy' }, { status: 503 }));
     const transport = createJsonChatTransport({

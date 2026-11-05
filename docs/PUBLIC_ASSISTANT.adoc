@@ -8,8 +8,10 @@ KnowAll AI
 
 Visitors to Timmie's public pages, signed out, can ask Timmie about the product, *mainly by voice*
 and also by text: what Timmie does, how it works with Business Central, the AI agent, the plans and
-pricing, what you need to run it, and common questions from the help page. For a demo, hosting,
-support or anything else it points them to the enquiry form at `/pricing#enquire`.
+pricing, what you need to run it, and common questions from the help page. His job is to help the
+visitor see whether Timmie fits their team and get them started (see <<sales-focus>>). For a demo,
+hosting, support or anything else it points them to the enquiry form at `/pricing#enquire`, and can
+hand the form a short summary of the conversation.
 
 Timmie is KnowAll AI's timekeeper: friendly, precise, British, with a little dry wit used
 sparingly. He is a *completely separate assistant* from anything in the signed-in app or the AI
@@ -105,6 +107,40 @@ own prompt, knowledge and Azure resource.
   Nothing is spoken through separate TTS at runtime.
 * *Silent fallbacks*: if the greeting clip fails or is held, or the call's audio is held, the bubble
   or panel shows *Tap to hear Timmie*.
+
+[[sales-focus]]
+== Sales focus
+
+Timmie sells the way Sallie does on knowall.ai, by being useful: he answers what was asked first,
+then qualifies *conversationally, one short question at a time*, and only when the answer would
+change his advice. The questions are the ones that decide fit: do they use Business Central (and is
+it Business Central Online), roughly how many people log time, how they track time today, and what
+hurts (chasing timesheets, billable percentage, planning, project budgets). He ties the answers to
+the matching Timmie feature from the product facts (`knowledge.ts`), never invents one, and says
+plainly when Timmie isn't a fit. A useful exchange ends with *one* next step: *Get Started* on the
+home page, or the enquiry form at `/pricing#enquire` for a demo, hosting, support or a pricing
+question. No urgency, no discounts, no promises.
+
+Unlike Sallie, he *never takes contact details*: rule 5 still forbids asking for a name, email
+address or phone number, and rule 7 discourages sharing any. The enquiry form collects them.
+
+.Send to the team (the form hand-off)
+. When Timmie links to the enquiry form in chat, or once a voice call has ended, the panel shows
+  *Send to the team*.
+. The widget posts to `POST /api/public/summary`, with the same pass and limits as chat. For chat
+  it sends the signed conversation (verified as a chain, exactly as `/api/public/chat` does); for
+  voice it sends the call key, and the server summarises the replies *it* recorded for that call
+  (`live-calls.ts`, kept 15 minutes after the call; the visitor's words were never recorded).
+. The server asks the chat model for *two to four first-person sentences* saying what the visitor
+  wants, with instructions to leave out any name, email address, phone number, company or anything
+  else identifying. Whatever comes back is cleaned (`summary.ts`): links, markdown and HTML removed,
+  email addresses and phone numbers scrubbed, capped at 600 characters. If the model is off or
+  fails, a fallback built from the visitor's own first question (cleaned the same way) is used, so
+  the button always works.
+. The widget puts the summary in `sessionStorage` (`ask-timmie:enquiry`) and goes to
+  `/pricing#enquire`, or raises a window event when the form is already on the page. The form reads
+  it into its message box once, clears the key, and the visitor edits it, adds their own name and
+  email, and sends it as any other enquiry. Nothing is sent anywhere by the widget itself.
 
 == Data flow
 
@@ -501,8 +537,13 @@ exists (see the PR's test plan).
 
 * `tests/unit/public-timmie/isolation.test.ts`: import graph, packages, environment variables,
   the ESLint rule, and that the signed-in check sits outside the helper.
-* `tests/unit/public-timmie/prompt.test.ts`: prompt hardening, persona, no addresses in voice, and
-  that the knowledge still matches the pricing and landing pages.
+* `tests/unit/public-timmie/prompt.test.ts`: prompt hardening, persona, the sales focus (fit, one
+  question at a time, one next step, no pushiness, still no contact details), no addresses in
+  voice, and that the knowledge still matches the pricing and landing pages.
+* `tests/unit/public-timmie/summary.test.ts` and the summary cases in `routes.test.ts`: the
+  cleaning (no email, phone, link, markdown or HTML), the cap, the fallback, the summariser request
+  (no tools, one visitor message), the pass and chain guards, and a voice call summarised only for
+  its own IP. `tests/unit/contact/EnquiryForm.prefill.test.tsx`: the form takes the summary once.
 * `tests/unit/public-timmie/live.test.ts`: the audio-only offer, the fixed session (no delegation),
   the watchdog event filter, and the hangup on sideband close or error, the time limit, tampering,
   the visitor going quiet, no start, too many replies and the visitor ending it.

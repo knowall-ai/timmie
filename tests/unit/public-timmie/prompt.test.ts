@@ -61,6 +61,25 @@ describe('Ask Timmie prompt hardening', () => {
     }
   });
 
+  it('sells by helping: fit, one question at a time, one next step, no pushiness, no contact details', () => {
+    for (const prompt of prompts) {
+      expect(prompt).toMatch(/help the visitor see whether Timmie fits their team/);
+      expect(prompt).toMatch(/Be useful first/);
+      expect(prompt).toMatch(/one short question at a time/);
+      expect(prompt).toMatch(/Business Central Online/);
+      expect(prompt).toMatch(/how many people log time/);
+      expect(prompt).toMatch(/Never ask more than one question in a reply/);
+      expect(prompt).toMatch(/using only the product facts below/);
+      expect(prompt).toMatch(/one clear next step, and only one/);
+      expect(prompt).toMatch(/no fake urgency, no discounts, no promises/);
+      expect(prompt).toMatch(/don't ask for a name, email address or phone number/);
+      expect(prompt).toMatch(/Stay on Timmie and time tracking/);
+      expect(prompt).toMatch(/Send to the team/);
+      // Still never a direct contact route: no email, no phone, no booking.
+      expect(prompt).not.toMatch(/mailto:|wa\.me|WhatsApp/i);
+    }
+  });
+
   it('is Timmie: KnowAll AI’s timekeeper, male, British, with sparing wit', () => {
     for (const prompt of prompts) {
       expect(prompt).toMatch(/You are Timmie, KnowAll AI's timekeeper/);

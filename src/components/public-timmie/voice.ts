@@ -27,6 +27,8 @@ export interface VoiceCall {
   resumeAudio(): Promise<void>;
   /** When the call will be ended (epoch ms). */
   endsAt: number;
+  /** The server's opaque key for this call (for a summary once it is over). */
+  key: string;
 }
 
 export interface VoiceAdapter {
@@ -230,6 +232,7 @@ export function createLiveVoice(options: {
         return {
           stop: () => stop(),
           endsAt,
+          key: callKey,
           setSpeakerMuted: (muted) => {
             audio.muted = muted;
           },
