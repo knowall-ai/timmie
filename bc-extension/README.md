@@ -689,15 +689,17 @@ The repo includes CI/CD workflows for both environments:
 
 | Workflow | Trigger | Target |
 |----------|---------|--------|
-| `deploy-sandbox.yml` | Push to `main` | Sandbox (Contoso Ltd) |
-| `deploy-production.yml` | Release published | Production (KnowAll Ltd) |
+| `bc-deploy-sandbox.yml` | Push to `main` that touches `bc-extension/` | Sandbox (Contoso Ltd) |
+| `bc-deploy-production.yml` | Release published with a `bc-v*` tag | Production (KnowAll Ltd) |
+
+The unprefixed `deploy-production.yml` deploys the web app, not the extension.
 
 **GitHub Environments Required:**
 
 Create two environments in Settings → Environments:
 
-1. **Sandbox** - No protection rules
-2. **Production** - Add required reviewers for safety
+1. **bc-sandbox** - No protection rules
+2. **bc-production** - Add required reviewers for safety. Allow the `bc-v*` tag pattern (and `main` for manual runs). It's separate from the web app's `production` environment, which only allows `v*` tags
 
 **Secrets (per environment):**
 

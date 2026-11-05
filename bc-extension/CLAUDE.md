@@ -92,8 +92,11 @@ For user information, use BC's standard Automation API:
 
 GitHub Actions workflows deploy to BC Online (SaaS):
 
-- `.github/workflows/deploy-sandbox.yml` - Triggered on push to `main`
-- `.github/workflows/deploy-production.yml` - Triggered on release
+- `.github/workflows/bc-ci.yml` - Compiles the extension on pull requests that touch `bc-extension/`
+- `.github/workflows/bc-deploy-sandbox.yml` - Triggered on push to `main` that touches `bc-extension/`
+- `.github/workflows/bc-deploy-production.yml` - Triggered on a published release tagged `bc-v*`
+
+The unprefixed `ci.yml` and `deploy-production.yml` belong to the web app.
 
 **Important**: BC Online requires different functions than BC on-premises containers:
 - Use `Publish-PerTenantExtensionApps` (not `Publish-BcContainerApp`)

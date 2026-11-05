@@ -195,7 +195,7 @@ Common issues and their solutions. Add new entries as problems are discovered an
 | Day notes need Timmie BC Extension 1.22.0.0 or later (the `dayNotes` API); with older versions they're hidden and the dates in the Plan header aren't clickable. Upgrade the extension from https://github.com/knowall-ai/timmie/tree/main/bc-extension, then reload the Plan.
 
 | The day notes popover has no *Add note*, edit or delete buttons, or saving a note says "You don't have permission to change day notes."
-| Only people who can write planning lines (Job Planning Line) in Business Central, Timmie administrators and the AI agent can change day notes; everyone else sees them read-only. Ask a BC administrator to give the user permission to modify Job Planning Lines (or the `THYME ADMIN` permission set). Timmie reads this from `canEditPlan` on the projects and resources APIs, so reload the Plan after the permission changes.
+| Only people who can write planning lines (Job Planning Line) in Business Central can change day notes; everyone else, including Timmie administrators and the AI agent, sees them read-only. Ask a BC administrator to give the user permission to modify Job Planning Lines (the `THYME ADMIN` permission set doesn't grant this). Timmie reads this from `canEditPlan` on the projects and resources APIs, so reload the Plan after the permission changes.
 
 | A Plan cell has a red outline on a hatched day, though the hours are within the person's day
 | The day has a *No project work* note (for everyone, or that person), e.g. an off-site, so any hours planned on it count as over capacity. Hover the cell for the note. Move the allocation to another day, or edit the note in the date's popover and untick *No project work* if the day is available after all.

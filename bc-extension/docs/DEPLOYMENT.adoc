@@ -17,8 +17,10 @@ The extension is published to two BC Online environments:
 
 Both deploys are driven by GitHub Actions workflows in `.github/workflows/`:
 
-* `deploy-sandbox.yml` — builds and publishes to the Contoso sandbox
-* `deploy-production.yml` — builds and publishes to the KnowAll production tenant
+* `bc-deploy-sandbox.yml` — builds and publishes to the Contoso sandbox
+* `bc-deploy-production.yml` — builds and publishes to the KnowAll production tenant
+
+(The unprefixed `deploy-production.yml` beside them deploys the web app.)
 
 == Why versioning matters
 
@@ -48,7 +50,7 @@ Triggered by every push to `main` (which in practice means every merged PR).
 
 === Pipeline steps
 
-The workflow at `.github/workflows/deploy-sandbox.yml`:
+The workflow at `.github/workflows/bc-deploy-sandbox.yml`:
 
 . Authenticates to Azure AD using `BC_TENANT_ID`, `BC_CLIENT_ID`, `BC_CLIENT_SECRET` secrets
 . Downloads the BC Online compiler artifact (`alc.exe` and symbol packages) for the `gb` locale via `Get-BCArtifactUrl`
@@ -71,14 +73,14 @@ See `docs/INSTALLATION.adoc` for how to create these.
 [[promotion-criteria]]
 == Promotion: sandbox to production
 
-=== Sandbox-first is structural
+=== Sandbox-first is the practice, not a guarantee
 
-Every change reaches the Contoso sandbox before production by virtue of how the workflows are wired:
+In the normal flow every change reaches the Contoso sandbox before production, because of how the workflows are wired:
 
-* `deploy-sandbox.yml` triggers on every push to `main` (i.e., every merged PR)
-* `deploy-production.yml` has no auto-trigger on push — it only runs on `release: published` or manual `workflow_dispatch`
+* `bc-deploy-sandbox.yml` triggers on every push to `main` that touches `bc-extension/` (i.e., every merged extension PR)
+* `bc-deploy-production.yml` has no auto-trigger on push — it only runs on a published `bc-v*` release or a manual `workflow_dispatch`
 
-So the first deploy of any commit is *always* to sandbox. There is no path that bypasses it.
+The workflows don't enforce it, though. A `workflow_dispatch` run can deploy any branch, a `bc-v*` release can target a commit that isn't on `main`, and the production workflow doesn't check for a successful sandbox run. So before promoting a commit, confirm that its *Deploy BC extension to Sandbox* run succeeded.
 
 === Verification window (currently undefined)
 
@@ -119,7 +121,7 @@ If the SHA returned by the second command is older than `origin/main`, sandbox a
 
 === Configured triggers
 
-The workflow `.github/workflows/deploy-production.yml` is configured to trigger on:
+The workflow `.github/workflows/bc-deploy-production.yml` is configured to trigger on:
 
 * `release: published` — publishing a GitHub Release fires the deploy
 * `workflow_dispatch` — manual run from the Actions tab
@@ -308,7 +310,7 @@ If this becomes an issue, pin the artifact version explicitly to match the targe
 $artifactUrl = Get-BCArtifactUrl -type Sandbox -country gb -version 27.0.x.x
 ----
 
-NOTE: An earlier configuration had `deploy-production.yml` pinned to `-country us` while `deploy-sandbox.yml` used `gb`. That divergence was removed (PR #36) so both environments now compile against identical symbols.
+NOTE: An earlier configuration had the production workflow pinned to `-country us` while the sandbox one used `gb`. That divergence was removed (PR #36) so both environments now compile against identical symbols.
 
 == Related documentation
 

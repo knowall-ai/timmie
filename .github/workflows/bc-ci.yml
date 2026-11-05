@@ -1,8 +1,8 @@
 name: BC extension CI
 
 on:
+  # Every PR that touches the extension, whatever its base, so stacked PRs are compiled too
   pull_request:
-    branches: [main]
     paths:
       - 'bc-extension/**'
       - '.github/workflows/bc-*.yml'

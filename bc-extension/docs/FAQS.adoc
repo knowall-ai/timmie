@@ -22,7 +22,15 @@ The extension itself is platform-agnostic AL code and would compile for on-premi
 
 === Does this extension store any data?
 
-No. The extension contains only API page objects and a single codeunit (`ThymeTimeSheetActions`) that wraps existing BC time sheet approval methods. It does not define any tables and stores no data of its own — all queries and updates go through standard BC tables (Job, Job Task, Time Sheet Header, Time Sheet Line, Time Sheet Detail, Resource, Job Ledger Entry).
+Yes, some. Time, projects, resources and planning lines are read and written through standard BC tables (Job, Job Task, Time Sheet Header, Time Sheet Line, Time Sheet Detail, Resource, Job Ledger Entry, Job Planning Line) and project notes are BC's own Record Links. The extension also has tables of its own (`src/table/`), which hold what the AI agent and Thyme add on top:
+
+* AI timesheet reviews and their findings (`Thyme Timesheet Review`, `Thyme Timesheet Review Line`), and timesheet review requests
+* AI time suggestions (`Thyme Time Suggestion`) and suggestion requests
+* AI plan reviews, their findings and proposed changes (`Thyme Plan Review`, `Thyme Plan Review Line`, `Thyme Plan Review Change`), and plan review requests
+* Day notes on the plan (`Thyme Day Note`) and projects' linked sources (`Thyme Project Source Link`)
+* The agent's heartbeat (`Thyme Agent Heartbeat`) and the company-wide settings (`Thyme Setup`)
+
+They're covered by the `THYME USER`, `THYME ADMIN` and `THYME AI AGENT` permission sets, and uninstalling the extension with its data removes them. Include them in any backup or retention plan.
 
 === Why is the user-information endpoint missing from this extension?
 

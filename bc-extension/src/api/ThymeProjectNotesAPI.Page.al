@@ -73,11 +73,15 @@ page 50123 "Thyme Project Notes API"
     trigger OnFindRecord(Which: Text): Boolean
     var
         JobNo: Code[20];
+        View: Text;
     begin
-        // Loaded once per request, for the project the filter names
+        // Loaded once per request, for the project the filter names. LoadNotes resets the buffer,
+        // so the request's filters and sorting are kept and put back afterwards.
         if not Loaded then begin
             JobNo := CopyStr(Rec.GetFilter("Job No."), 1, MaxStrLen(JobNo));
+            View := Rec.GetView();
             ProjectNotes.LoadNotes(JobNo, Rec);
+            Rec.SetView(View);
             Loaded := true;
         end;
         exit(Rec.Find(Which));
