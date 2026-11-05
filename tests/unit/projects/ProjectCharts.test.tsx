@@ -35,18 +35,26 @@ const weeklyData = [3, 2, 1, 0].map((weeksAgo, i) => ({
   cumulative: 8 * (i + 1),
 }));
 
-function setup(hiddenKpis: string[], startDate?: string) {
+function setup(
+  hiddenKpis: string[],
+  startDate?: string,
+  data = weeklyData,
+  analytics: Record<string, unknown> = {}
+) {
   useProjectDetailsStore.setState({
     project: { id: 'p1', number: 'PR001', name: 'Contoso Website', isInternal: false, startDate },
     analytics: {
-      weeklyData,
+      weeklyData: data,
       hoursSpent: 32,
       hoursPlanned: 80,
       estimateHours: 80,
       hoursPerDay: 8,
-      invoicedPrice: 3200,
+      // £1,000 of the posted price is an Item, not hours: the chart's rate must leave it out
+      invoicedPrice: 4200,
+      invoicedPriceBreakdown: { resource: 3200, ai: 0, item: 1000, glAccount: 0, total: 4200 },
       unpostedBillable: 0,
       billablePriceBreakdown: { resource: 8000 },
+      ...analytics,
     },
     isLoadingAnalytics: false,
     currencyCode: 'GBP',
@@ -69,6 +77,44 @@ describe('Spend vs Budget chart with hidden figures', () => {
     chooseUnit('£');
     expect(screen.queryByText('Amounts are hidden')).toBeNull();
     expect(screen.getAllByText(/Budget: £8\.0k/).length).toBeGreaterThan(0);
+  });
+
+  it('prices the hours at the posted Resource rate, leaving Item, G/L and AI prices out', () => {
+    // 8h planned next week, so there's a forecast to price
+    const nextWeek = {
+      week: isoWeek(-1),
+      hours: 0,
+      approvedHours: 0,
+      pendingHours: 0,
+      plannedHours: 8,
+      cumulative: 32,
+    };
+    setup([...DEFAULT_HIDDEN_KPIS], undefined, [...weeklyData, nextWeek]);
+    chooseUnit('£');
+    // 32h at £3,200 of posted hours = £100/h, so the 40h forecast in the legend is £4.0k,
+    // not £5.3k (£131.25/h with the Item's £1,000 in the rate)
+    expect(screen.getByText(/Forecast \(£4\.0k at completion\)/)).toBeInTheDocument();
+    expect(screen.queryByText(/£5\.\dk at completion/)).toBeNull();
+  });
+
+  it('keeps a £0 posted Resource rate, rather than pricing posted hours at the estimate rate', () => {
+    const nextWeek = {
+      week: isoWeek(-1),
+      hours: 0,
+      approvedHours: 0,
+      pendingHours: 0,
+      plannedHours: 8,
+      cumulative: 32,
+    };
+    // 32h posted at £0 (non-chargeable), plus a £1,000 Item: the hours are worth £0, not
+    // £100/h from the £8,000 estimate
+    setup([...DEFAULT_HIDDEN_KPIS], undefined, [...weeklyData, nextWeek], {
+      hoursPosted: 32,
+      invoicedPrice: 1000,
+      invoicedPriceBreakdown: { resource: 0, ai: 0, item: 1000, glAccount: 0, total: 1000 },
+    });
+    chooseUnit('£');
+    expect(screen.getByText(/Forecast \(£0 at completion\)/)).toBeInTheDocument();
   });
 
   it('shows an empty state instead of a flat chart when Billable Price is hidden', () => {

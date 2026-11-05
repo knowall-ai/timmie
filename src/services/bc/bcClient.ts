@@ -20,6 +20,7 @@ import type {
   BCTimeSheetLine,
   BCTimeSheetDetail,
   BCTimeEntry,
+  BCJobCostEntry,
   BCTimeSuggestion,
   BCTimeSuggestionUpdate,
   BCSuggestionRequest,
@@ -241,6 +242,8 @@ class BusinessCentralClient {
   private _environment: BCEnvironmentType;
   private _extensionInstalled: boolean | null = null;
   private _extensionCheckPromise: Promise<boolean> | null = null;
+  // The extension has no /jobCostEntries (404: before 1.28.0.0), so don't ask again
+  private _jobCostEntriesMissing = false;
   // The current company's names, fetched once per company (see getCompanyNames)
   private _companyNames: { key: string; promise: Promise<string[]> } | null = null;
 
@@ -320,6 +323,7 @@ class BusinessCentralClient {
       // Reset extension cache when company/environment changes
       this._extensionInstalled = null;
       this._extensionCheckPromise = null;
+      this._jobCostEntriesMissing = false;
       this._companyNames = null;
     }
   }
@@ -467,6 +471,7 @@ class BusinessCentralClient {
   resetExtensionCache(): void {
     this._extensionInstalled = null;
     this._extensionCheckPromise = null;
+    this._jobCostEntriesMissing = false;
   }
 
   // ============================================
@@ -1177,7 +1182,9 @@ class BusinessCentralClient {
   }
 
   // Time Entries - requires Timmie BC Extension v1.7.0+
-  // Provides posted time entries from Job Ledger Entry (actual cost and invoiced price)
+  // Provides posted time entries from Job Ledger Entry (actual cost and invoiced price).
+  // Nothing on an extension without the endpoint (404); any other failure throws, so the
+  // caller can say the costs are incomplete rather than show them as zero.
   async getTimeEntries(jobNumber: string): Promise<BCTimeEntry[]> {
     // Check if extension is installed
     const extensionInstalled = await this.isExtensionInstalled();
@@ -1194,14 +1201,52 @@ class BusinessCentralClient {
       );
     } catch (error) {
       // 404 means the endpoint doesn't exist (extension too old)
-      if (error instanceof Error && error.message.includes('404')) {
+      if (isEndpointMissing(error)) {
         console.warn(
           '[BC API] timeEntries endpoint not found. Upgrade Timmie BC Extension to v1.7.0+.'
         );
         return [];
       }
       console.error('[BC API] Error fetching time entries:', error);
-      return [];
+      throw error;
+    }
+  }
+
+  /**
+   * A project's Job Ledger Entries of every type (Resource, Item and G/L Account), for its
+   * real cost and price: non-hour costs such as AI services are posted as G/L Account lines,
+   * which /timeEntries (Resource only) doesn't return. Requires Timmie BC Extension 1.28.0.0+.
+   *
+   * Returns null when the endpoint isn't there (an older extension: 404), remembered for this
+   * company until the extension cache is reset, so the caller falls back to getTimeEntries, as
+   * before. Any other failure (401, 403, 429, 500...) throws: falling back would show
+   * Resource-only costs and a wrong margin. Only people's Resource entries' quantity is hours:
+   * callers must classify on `type` and `resourceType`.
+   */
+  async getJobCostEntries(jobNumber: string): Promise<BCJobCostEntry[] | null> {
+    const extensionInstalled = await this.isExtensionInstalled();
+    if (!extensionInstalled || this._jobCostEntriesMissing) return null;
+
+    // The company and environment this request is for: a 404 that arrives after they've
+    // changed is about the old selection, so it mustn't be remembered for the new one
+    const requestCompanyId = this._companyId;
+    const requestEnvironment = this._environment;
+    const filter = `jobNo eq '${this.sanitizeODataString(jobNumber)}'`;
+    try {
+      const entries = await this.customApiFetchAll<BCJobCostEntry>(
+        `/jobCostEntries?$filter=${encodeURIComponent(filter)}`
+      );
+      // BC encodes "G/L Account" as "G_x002F_L_x0020_Account"
+      return entries.map((entry) => ({ ...entry, type: decodeBCEnum(entry.type) }));
+    } catch (error) {
+      if (isEndpointMissing(error)) {
+        // Expected until the extension is updated: use timeEntries, as before
+        if (this._companyId === requestCompanyId && this._environment === requestEnvironment) {
+          this._jobCostEntriesMissing = true;
+        }
+        return null;
+      }
+      throw error;
     }
   }
 
