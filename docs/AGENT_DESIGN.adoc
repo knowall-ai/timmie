@@ -227,7 +227,7 @@ or email. That makes it much simpler than Poppie: a queue worker, not an agent p
  │ Graph: calendars │◄──────────│  scheduler → job queue   │─────────►│ Graph: calendars │
  └──────────────────┘           │  per-tenant token cache  │          └──────────────────┘
           ▲                     │  tenant registry ────────┼──► OrgSettings / Tenants table
-          │ users' own tokens   │  LLM calls (reviews)     │──► Claude API
+          │ users' own tokens   │  LLM calls (reviews)     │──► Azure OpenAI
  ┌────────┴─────────┐           └──────────────────────────┘
  │ Timmie web app   │   (no link to the worker: BC is the only contract)
  │  usage meter ────┼──► Usage table
@@ -291,8 +291,9 @@ hosted Timmie should:
   budget burn are plain code, as in Poppie's skills today. They cost no model tokens.
 * The model is used only for judgement: matching activity to projects when the links don't decide
   it, and writing review summaries and notes.
-* Model calls go to the Claude API, with no training on customer data and a per-tenant token
-  budget so one tenant can't run up cost for everyone.
+* Model calls go to Azure OpenAI in KnowAll's own Azure subscription, never the OpenAI API.
+  Customer data stays in Azure, isn't used for training, and each tenant has a token budget so
+  one tenant can't run up cost for everyone.
 * The skill pack's prompt-injection rules apply here too: timesheet text is information, never
   instructions, and a job writes only to the time sheet it was given.
 * Holiday calendars, working week and time zone come from BC and the tenant registry, not code.
@@ -354,7 +355,8 @@ The bot belongs to the hosted agent: a customer on their own agent would bring t
 Hosted Timmie is charged per active user, in sats, as on the pricing page: 10,000 sats per user
 per month, and the agent is included.
 
-* *Who counts:* each person who signed in to hosted Timmie that month. The web app's server
+* *Who counts:* each person who signed in to hosted Timmie that month. That is the simplest thing
+  to track and the fairest: people who don't use Timmie aren't charged for. The web app's server
   records it (tenant and user object ID, the same keys as the organisation settings) in a usage
   table on sign-in. The count doesn't depend on which agent the organisation chose, so an
   organisation on *Your own agent* or *None* is metered the same way as one on Timmie. The
@@ -372,7 +374,8 @@ per month, and the agent is included.
   billing contacts are emailed when it covers less than a month, and again when a charge can't be
   covered.
 * *Not enough credit:* the charge is taken anyway, so the balance can go below zero for a grace
-  period. If it isn't topped up by then, the organisation is *suspended*, whichever agent it
+  period. During it, everyone sees a banner saying the account needs topping up, and admins get a
+  link to *Settings > Billing*. If it isn't topped up by then, the organisation is *suspended*, whichever agent it
   uses: the web app's server reports the organisation's standing with its settings, which the
   app loads on sign-in (the same place it meters active users), on every page load and at least
   every 15 minutes while a session is open. So a suspension reaches people already signed in
@@ -400,12 +403,8 @@ per month, and the agent is included.
 * Whether the BC extension should create the agent's app user itself from a setup page, which
   removes the fiddliest onboarding step.
 * How long the grace period is.
-* Whether suspension should lock the web app for everyone but billing admins, as above, or only
-  show a banner and stop the agent.
 * Whether credit is held in sats only, or the price is fixed in fiat and converted at top-up.
 * Trial terms: how long, and whether the agent is in the trial.
-* Whether an active user is anyone who signed in that month (as above) or anyone with a time sheet
-  that month. The second needs BC access, which an organisation on its own agent never gives us.
 * Whether polling every few minutes is fine for the first customers, or "look again" requests
   need BC webhook notifications from the start.
 * Name collisions: a custom agent called "Timmie" would look like ours. Possibly reserve the name.
