@@ -7,6 +7,7 @@ Capture screenshots of web applications for marketing materials, AppSource listi
 1. **Edge/Chrome with remote debugging**: The browser must be started with `--remote-debugging-port=9222`
 2. **Playwright installed**: Already included in project dev dependencies
 3. **App running**: Dev server must be running (e.g., `bun run dev`)
+4. **Working directory**: the web app lives in `web/`; run the commands below from there (the paths are relative to it)
 
 ## Starting Browser with Debug Port
 
