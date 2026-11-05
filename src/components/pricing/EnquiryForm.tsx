@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { CheckCircleIcon } from '@heroicons/react/24/outline';
 import { Button, Input } from '@/components/ui';
 import {
@@ -8,6 +8,20 @@ import {
   ENQUIRY_OPTION_LABELS,
   type EnquiryOption,
 } from '@/services/contact/enquiry';
+import { ENQUIRY_PREFILL_EVENT, ENQUIRY_PREFILL_KEY } from '@/services/public-timmie/shared';
+
+const MESSAGE_MAX = 5000;
+
+/** A message Ask Timmie left for the form (and clear it, so a later visit starts blank). */
+function takePrefill(): string {
+  try {
+    const text = window.sessionStorage.getItem(ENQUIRY_PREFILL_KEY);
+    if (text) window.sessionStorage.removeItem(ENQUIRY_PREFILL_KEY);
+    return text ?? '';
+  } catch {
+    return '';
+  }
+}
 
 interface EnquiryFormProps {
   option: EnquiryOption;
@@ -18,6 +32,17 @@ type Status = { state: 'idle' | 'sending' | 'sent' } | { state: 'error'; message
 
 export function EnquiryForm({ option, onOptionChange }: EnquiryFormProps) {
   const [status, setStatus] = useState<Status>({ state: 'idle' });
+  const [message, setMessage] = useState('');
+
+  // "Send to the team" in Ask Timmie: a summary left in sessionStorage (arriving from
+  // another page) or raised as an event (the widget on this page) fills the message box.
+  useEffect(() => {
+    const take = (text: string) => text && setMessage(text.slice(0, MESSAGE_MAX));
+    take(takePrefill());
+    const onPrefill = (e: Event) => take(String((e as CustomEvent<string>).detail ?? ''));
+    window.addEventListener(ENQUIRY_PREFILL_EVENT, onPrefill);
+    return () => window.removeEventListener(ENQUIRY_PREFILL_EVENT, onPrefill);
+  }, []);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -128,8 +153,10 @@ export function EnquiryForm({ option, onOptionChange }: EnquiryFormProps) {
           name="message"
           required
           minLength={10}
-          maxLength={5000}
+          maxLength={MESSAGE_MAX}
           rows={5}
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
           placeholder="Tell us about your team and how you use Business Central."
           className="border-dark-600 bg-dark-800 placeholder:text-dark-400 focus:ring-brand w-full rounded-lg border px-3 py-2 text-sm text-white focus:border-transparent focus:ring-2 focus:outline-none"
         />
