@@ -106,6 +106,7 @@ export interface ProjectAnalytics {
   weeklyData: WeeklyDataPoint[];
   taskBreakdown: TaskBreakdownItem[];
   teamBreakdown: TeamBreakdownItem[];
+  monthBreakdown: MonthBreakdownItem[];
   /** The first and last days with time (YYYY-MM-DD), for linking to the time on Reports */
   firstEntryDate?: string;
   lastEntryDate?: string;
@@ -147,6 +148,14 @@ interface TeamBreakdownItem extends StatusHours {
   resourceNo: string;
   name: string;
   unitPrice?: number; // Unit price for this resource from Resource Card or Job Planning Lines
+  tasks?: (StatusHours & {
+    taskNo: string;
+    description: string;
+  })[];
+}
+
+interface MonthBreakdownItem extends StatusHours {
+  month: string; // YYYY-MM
   tasks?: (StatusHours & {
     taskNo: string;
     description: string;
@@ -294,6 +303,7 @@ export const projectDetailsService = {
       weeklyData: [],
       taskBreakdown: [],
       teamBreakdown: [],
+      monthBreakdown: [],
     });
 
     // Check if extension is installed
@@ -380,6 +390,7 @@ export const projectDetailsService = {
     // card: from the timesheets, by the same rule as Team and Reports (getPostedHours).
     // The Job Ledger is still what cost and invoiced figures come from.
     const postedByTaskResource = new Map<string, number>(); // key: "taskNo|resourceNo"
+    const postedByMonthTaskResource = new Map<string, number>(); // key: "YYYY-MM|taskNo|resourceNo"
     let timesheetPostedHours = 0;
     for (const { line, detail, resourceNo } of timeRows) {
       const resource = resourcesByNumber.get(resourceNo)!;
@@ -387,6 +398,11 @@ export const projectDetailsService = {
       if (posted > 0) {
         const key = `${line.jobTaskNo || 'no-task'}|${resourceNo}`;
         postedByTaskResource.set(key, (postedByTaskResource.get(key) ?? 0) + posted);
+        const monthKey = `${detail.date.slice(0, 7)}|${key}`;
+        postedByMonthTaskResource.set(
+          monthKey,
+          (postedByMonthTaskResource.get(monthKey) ?? 0) + posted
+        );
         timesheetPostedHours += posted;
       }
 
@@ -760,6 +776,12 @@ export const projectDetailsService = {
       string,
       { name: string; status: StatusTally; tasks: Map<string, StatusTally> }
     >();
+    // By month: each month's time, split by task. Posted hours are capped per month, task
+    // and person, so a month row matches the task rows under it.
+    const monthMap = new Map<
+      string,
+      { status: StatusTally; tasks: Map<string, StatusTally>; pairs: Map<string, StatusTally> }
+    >();
     const descriptionByTask = new Map<string, string>();
     const nameByResource = new Map<string, string>();
     for (const entry of timeEntries) {
@@ -792,6 +814,21 @@ export const projectDetailsService = {
       let memberTask = member.tasks.get(taskKey);
       if (!memberTask) member.tasks.set(taskKey, (memberTask = emptyStatus()));
       tally(memberTask, entry);
+
+      const monthKey = entry.date.slice(0, 7);
+      let month = monthMap.get(monthKey);
+      if (!month) {
+        month = { status: emptyStatus(), tasks: new Map(), pairs: new Map() };
+        monthMap.set(monthKey, month);
+      }
+      tally(month.status, entry);
+      let monthTask = month.tasks.get(taskKey);
+      if (!monthTask) month.tasks.set(taskKey, (monthTask = emptyStatus()));
+      tally(monthTask, entry);
+      const pairKey = `${taskKey}|${entry.resourceNo}`;
+      let pair = month.pairs.get(pairKey);
+      if (!pair) month.pairs.set(pairKey, (pair = emptyStatus()));
+      tally(pair, entry);
     }
 
     // Default order is by hours here; the table re-sorts into BC's own order for display
@@ -833,6 +870,36 @@ export const projectDetailsService = {
           .sort((a, b) => b.hours - a.hours),
       }))
       .sort((a, b) => b.hours - a.hours);
+
+    // Months in date order; a month's (and its tasks') posted hours are the sum of its
+    // task-person pairs', each capped at that pair's approved hours that month
+    const monthBreakdown: MonthBreakdownItem[] = Array.from(monthMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, data]) => {
+        const postedByTask = new Map<string, number>();
+        for (const [pairKey, t] of data.pairs) {
+          const taskNo = pairKey.slice(0, pairKey.lastIndexOf('|'));
+          const posted = Math.min(
+            postedByMonthTaskResource.get(`${month}|${pairKey}`) ?? 0,
+            t.approvedHours
+          );
+          postedByTask.set(taskNo, (postedByTask.get(taskNo) ?? 0) + posted);
+        }
+        return {
+          month,
+          ...toStatusHours(
+            data.status,
+            [...postedByTask.values()].reduce((sum, p) => sum + p, 0)
+          ),
+          tasks: Array.from(data.tasks.entries())
+            .map(([taskNo, t]) => ({
+              taskNo,
+              description: descriptionByTask.get(taskNo) ?? 'Unknown Task',
+              ...toStatusHours(t, postedByTask.get(taskNo) ?? 0),
+            }))
+            .sort((a, b) => b.hours - a.hours),
+        };
+      });
 
     // Calculate unposted hours and estimated costs
     const hoursUnposted = Math.max(0, totalHours - hoursPosted);
@@ -921,6 +988,7 @@ export const projectDetailsService = {
       weeklyData,
       taskBreakdown,
       teamBreakdown,
+      monthBreakdown,
       firstEntryDate,
       lastEntryDate,
     };
