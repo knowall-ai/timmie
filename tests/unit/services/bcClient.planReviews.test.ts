@@ -246,6 +246,8 @@ describe('bcClient plan reviews', () => {
       body: JSON.stringify({
         error: {
           code: 'Application_DialogException',
+          // The extension's own words (it names the agent it was written for; the Plan
+          // swaps in the organisation's agent, see planChangedText)
           message:
             'The plan changed since Poppie looked. Ask her to re-review.  CorrelationId: abc',
         },
