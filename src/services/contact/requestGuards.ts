@@ -26,16 +26,20 @@ let daily = { day: '', used: 0 };
  * Service appends the real peer as the last x-forwarded-for entry (as ip:port); earlier
  * entries come from the client and can be forged, so they're ignored.
  */
-/** True unless FRONT_DOOR_ID is set and the request didn't come through that Front Door */
-function fromOurFrontDoor(req: Request): boolean {
-  const expected = process.env.FRONT_DOOR_ID?.trim().toLowerCase();
+/** Our Azure Front Door profile id (`FRONT_DOOR_ID`), shared by every public route. */
+export function frontDoorId(): string | undefined {
+  return process.env.FRONT_DOOR_ID?.trim() || undefined;
+}
+
+/** True unless a Front Door id is set and the request didn't come through that Front Door */
+export function fromOurFrontDoor(headers: Headers, expected = frontDoorId()): boolean {
   if (!expected) return true;
-  return req.headers.get('x-azure-fdid')?.trim().toLowerCase() === expected;
+  return headers.get('x-azure-fdid')?.trim().toLowerCase() === expected.trim().toLowerCase();
 }
 
 export function clientIp(req: Request): string {
   const socketIp = req.headers.get('x-azure-socketip')?.trim();
-  if (socketIp && fromOurFrontDoor(req)) return socketIp;
+  if (socketIp && fromOurFrontDoor(req.headers)) return socketIp;
   const forwarded = req.headers.get('x-forwarded-for');
   if (forwarded) {
     const last = forwarded.split(',').at(-1)!.trim();
