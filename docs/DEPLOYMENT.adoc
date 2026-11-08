@@ -169,11 +169,16 @@ Two workflows run on GitHub Actions:
 * `.github/workflows/ci.yml` runs format, lint, type check, unit tests and a build on every PR.
 * `.github/workflows/deploy-production.yml` deploys to the `timmie-knowall` App Service when a `v*` tag is pushed (see <<Release Workflow>>). Pushing to `main` doesn't deploy.
 
-The deploy uses these repository secrets:
+A build job tests and builds without any Azure access. A separate deploy job, in the `production` environment, signs in to Azure with GitHub's OIDC token, so the deploy uses no Azure password. The deploy app registration (`timmie-github-deploy`) has a federated credential for `repo:knowall-ai@50064085/timmie@1127257227:environment:production` and *Website Contributor* on `timmie-knowall` only. The subject carries the owner and repository IDs because the repository's Actions OIDC setting uses ID-based subjects; turning that setting off would change the subject and break the sign-in. Its IDs are variables on the `production` environment:
 
-* `AZURE_CREDENTIALS`: the deploy service principal, with Contributor on `timmie-knowall` only
+* `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` and `AZURE_SUBSCRIPTION_ID`
+
+The deploy also uses these repository secrets:
+
 * `AZURE_WEBAPP_NAME`: `timmie-knowall`
 * `NEXT_PUBLIC_AZURE_CLIENT_ID`, `NEXT_PUBLIC_AZURE_TENANT_ID` and `NEXT_PUBLIC_AZURE_REDIRECT_URI`, which are baked in at build time
+
+NOTE: Until the first release has deployed with OIDC, the old `AZURE_CREDENTIALS` repository secret and the app registration's client secret still exist as a fallback. Once it has, delete both; nothing else uses them.
 
 == Release Workflow
 
@@ -219,7 +224,8 @@ protection). Other contributors must release via a PR — see the next section.
 
 === Releasing as a non-admin (via PR)
 
-Non-admin contributors cannot push the version-bump commit directly to `main`.
+Non-admin contributors cannot push the version-bump commit directly to `main`,
+and only admins and maintainers can push `v*` tags (see <<Who can deploy what>>).
 The release flow becomes:
 
 [source,bash]
@@ -241,7 +247,9 @@ git push -u origin release/v1.2.1
 gh pr create --fill
 #    …or open the PR from the branch page in the GitHub web UI.
 
-# 4. After the PR is merged, tag the merge commit on main and push the tag.
+# 4. After the PR is merged, ask an admin or maintainer to tag the merge
+#    commit on main and push the tag. The tag ruleset rejects the push from
+#    anyone else, so the deploy would not start.
 git switch main && git pull --ff-only
 git tag v1.2.1
 git push origin v1.2.1
@@ -261,12 +269,12 @@ admin one-liner.
 | Branch protection blocks the direct push for non-admins.
 
 | Push a `v*` tag to trigger production deploy
-| Repo write
-| Tags are not gated by branch protection — anyone with write access can push *any* `v*` tag and trigger the production deploy. There is no enforcement that the tagged commit is reachable from `main`; team convention is to tag merge commits on `main` only.
+| Repo admin or maintain
+| A tag ruleset lets only admins and maintainers create, move or delete `v*` tags, and the `production` environment accepts deploys only from `v*` tags. Nothing enforces that the tagged commit is reachable from `main`; team convention is to tag merge commits on `main` only.
 
 | Approve a production deploy at an environment gate
 | (not configured)
-| `deploy-production.yml` does not declare `environment: production` on its job, so adding required reviewers to the `production` Actions environment would not currently pause the workflow. To add an approval gate, set `environment: production` on the deploy job and configure required reviewers.
+| The deploy job runs in the `production` environment, so adding required reviewers there would pause each deploy until one approves.
 |===
 
 == Testing a PR
