@@ -76,7 +76,10 @@ describe('project analytics by month', () => {
     ]);
 
     // The months add up to the project's whole breakdown
-    const total = a.monthBreakdown.reduce((sum, m) => sum + m.hours, 0);
-    expect(total).toBe(a.taskBreakdown.reduce((sum, t) => sum + t.hours, 0));
+    for (const key of ['hours', 'postedHours', 'approvedHours'] as const) {
+      const byMonth = a.monthBreakdown.reduce((sum, m) => sum + m[key], 0);
+      const byTask = a.taskBreakdown.reduce((sum, t) => sum + t[key], 0);
+      expect(byMonth).toBe(byTask);
+    }
   });
 });
