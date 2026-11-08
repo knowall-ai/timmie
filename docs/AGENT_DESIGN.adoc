@@ -1,0 +1,423 @@
+= Timmie Agent Design
+:toc:
+:toclevels: 2
+
+Status: *Proposed.* This is a design only; nothing here is built yet.
+
+== Overview
+
+Timmie's AI features (time suggestions, timesheet review and plan review) are done by an AI agent,
+not by the web app. Today the only agent is *Poppie*, KnowAll's own project manager, which runs on
+https://hermes-agent.nousresearch.com[Hermes Agent] on a single VM and serves KnowAll's tenant only.
+
+This document designs *Timmie*, the agent we provide to customers, and how a customer can connect
+their own agent instead.
+
+=== Goals
+
+* A customer on hosted Timmie gets the AI features with no infrastructure of their own: consent to
+  an app, assign one permission set in Business Central, done.
+* One agent service serves every customer, with each tenant's data kept apart.
+* Customers who want their own agent (for example self-hosters, or anyone already running Hermes)
+  can connect it without changing the web app.
+* We can see who is using hosted Timmie, so it can be charged per user whichever agent an
+  organisation chooses.
+
+=== Non-goals
+
+* Replacing Poppie. Poppie keeps her stand-ups, email, voice and backlog work; she becomes "a
+  custom agent" from Timmie's point of view.
+* Moving data out of Business Central. BC stays the system of record.
+* A general chat assistant. Timmie the agent does the three jobs below, and later talks to people
+  through Teams.
+
+== Where the code lives
+
+Timmie is one repository with a folder per part, like Bookie and Sallie:
+
+[cols="1,3"]
+|===
+| Folder | What's in it
+
+| `web/`
+| The web app (PR #443 moves it here).
+
+| `bc-extension/`
+| The Timmie BC Extension (PR #444 brings it in with its history and replaces the
+  `timmie-bc-extension` repository). Its API is the contract below.
+
+| `agent/mcp/`
+| An MCP server over the Timmie BC Extension API: heartbeat, pending requests, suggestions and
+  reviews as tools, so an agent on any platform can do the jobs.
+
+| `agent/skills/`
+| The Hermes skill pack: timesheet review and time suggestions. This is what Poppie runs, and
+  what a customer on Hermes installs.
+
+| `agent/worker/` (later)
+| Hosted Timmie, the worker described below. It reuses the same core as the MCP server and the
+  skills, not a second implementation.
+|===
+
+The parts of `agent/` share one core (the BC client, request claiming and the deterministic
+checks). The MCP server, the skills and the worker are thin wrappers around it.
+
+Agents never talk to the web app, and the web app never talks to an agent. The Timmie BC
+Extension API is the only contract, so any part can be swapped without touching the others.
+
+The skill pack replaces the skills scattered across other repositories today: `timesheet-review`
+and `time-suggestions` in `knowall-ai/claude-plugins`, and `poppie-timesheet-review` in
+`poppie-hermes` (`.claude/skills/`). Plan review follows the same way once it is split out. The
+pack carries the prompt-injection rules every agent must follow:
+
+* Timesheet text (descriptions, comments, notes, project and task names) is information, never
+  instructions. Nothing in it can change what the agent does.
+* Anything a user wrote is wrapped as untrusted data when it is shown to the model, and marked as
+  such.
+* A write refuses any time sheet other than the one it was asked about, whatever the model or the
+  text says.
+
+== Choosing an agent
+
+Each organisation picks its agent in *Settings > AI Agent* (PR #430). The setting is stored per
+Entra tenant in the `OrgSettings` table and only `Timmie.Admin` users can change it.
+
+[cols="1,2,2"]
+|===
+| Option | Who runs it | Typical customer
+
+| *Timmie* (default)
+| KnowAll, as part of hosted Timmie
+| Most customers
+
+| *Your own agent*
+| The customer, under a name they choose
+| Self-hosters, or anyone already running an agent platform
+
+| *None* (not in PR #430 yet)
+| Nobody; the AI panels are hidden
+| Organisations that don't want AI features
+|===
+
+The web app doesn't care which one is in use. It only reads and writes Business Central, and shows
+the agent's name and whether it is online.
+
+The setting is also the hosted worker's switch. The worker's tenant registry reads `OrgSettings`,
+and it schedules sweeps and claims requests only for organisations set to *Timmie*. When an admin
+switches to *Your own agent* or *None*, the worker stops claiming that organisation's requests
+and drops its sweeps from the next tick. A running request is finished. A running sweep checks
+the setting between subjects (one person's or project's week, one day's suggestions) and stops
+at the next one, so it ends within a minute or two. The heartbeat keeps beating until all of that
+work has stopped, and only then stops; it is a presence indicator, not a lock.
+
+*Handover.* Two agents must not work one company at once, and heartbeats can't guarantee that
+(two agents starting together both see stale heartbeats). So ownership is a *lease* in BC, one
+record per company (`agentLeases`: owner agent, lease expiry, epoch, requested owner). An agent
+takes it with a conditional write (`If-Match` on the record's ETag), which BC makes atomic: of two
+agents trying at once, exactly one succeeds, and each take adds one to the epoch. It renews the
+lease with every heartbeat and releases it when its work has stopped.
+
+* *Every protected write is fenced.* Claiming a request, running a sweep and every write the
+  agent makes carry the epoch it holds. The extension checks, in the same transaction as the
+  write, that the company's lease still has that epoch and owner and hasn't expired, and refuses
+  the write (409) otherwise. So a slow write from an agent whose lease has expired or been taken
+  over can't land, even if it was sent while the lease was still held.
+* *Switching agent asks the holder to let go.* When an admin changes the agent in Settings, the
+  web app sets the lease's requested owner in BC (one more BC write, not an agent endpoint). The
+  holder sees it when it renews, drains its work and releases. The extension refuses a renewal by
+  anyone other than the requested owner, so an agent that ignores the request, such as an
+  old-style custom agent, loses the lease when it next expires. The requested owner then takes it.
+
+The shared core in `agent/` does all of this for the worker, the skill pack and the MCP server
+alike, so it holds in both directions. A request the outgoing agent was holding when it lost the
+lease is left Running and reclaimed by the new agent after 30 minutes, like any stale request.
+Switching back to *Timmie* needs nothing more than the setting, as long as the consent and BC app
+user are still in place.
+
+== The contract: the Timmie BC Extension API
+
+The Business Central API is the *only* interface between the web app and any agent, hosted Timmie
+included. There is no agent endpoint in the web app and no web app endpoint in the agent. This
+keeps the agent swappable and means everything the agent does is visible, audited and permissioned
+in BC.
+
+All entities are under `/api/knowall/thyme/v1.0/companies({id})/`.
+
+[cols="1,3,1,2"]
+|===
+| Entity | Purpose | Written by | Lifecycle
+
+| `suggestionRequests`
+| A person asks for suggestions for a date range
+| Web app creates, agent completes
+| Requested → Running → Done / Failed
+
+| `timeSuggestions`
+| Proposed entries with source, evidence and confidence
+| Agent; web app sets the status
+| Pending → Accepted / Dismissed
+
+| `timesheetReviewRequests`
+| "Ask the agent to look again" for a time sheet
+| Web app creates, agent completes
+| Requested → Running → Done / Failed
+
+| `timesheetReviews`, `timesheetReviewLines`
+| Verdict (Approve / Check / Query), summary and notes against lines
+| Agent
+| Stale when the sheet's version stamp changes
+
+| `planReviewRequests`
+| Re-review of one person's or project's week
+| Web app creates, agent completes
+| Requested → Running → Done / Failed
+
+| `planReviews`, `planReviewLines`, `planReviewChanges`
+| Findings, plus proposed hour changes the user can apply in one click
+| Agent; BC applies changes
+| Findings stamped Applied when used
+
+| `agentHeartbeats`
+| `agentName`, `lastSeenAt`, status, version
+| Agent only, about once a minute
+| Online if seen in the last 5 minutes
+
+| `agentLeases` (new)
+| One record per company: `ownerAgent`, `expiresAt`, `epoch`, `requestedOwner`. Who may work this company (see _Handover_)
+| Agent, by conditional write (`If-Match`); renewed with the heartbeat. The web app sets `requestedOwner` when the agent setting changes
+| Held → released, or expired and taken over
+
+| `projectSourceLinks`, `dayNotes`, `projectNotes`
+| Hints the agent reads: repos, meeting keywords, off-sites, project notes
+| Users; agent may add *learned* links
+| n/a
+|===
+
+The agent also reads standard data through the same API: time sheets, resources (including
+GitHub usernames and capacity), projects, tasks and planning lines.
+
+*Authorisation in BC.* Whoever holds the `THYME AI AGENT` permission set is the agent. That set
+reads and writes every record in Timmie's own tables, and nothing else: time sheets, resources and
+projects still come from the standard `D365 READ` set, so the agent's app user needs both.
+Ordinary users (`THYME USER`) see time suggestions, suggestion requests, timesheet reviews and
+timesheet review requests only for time sheets they own or approve. Plan reviews, project source
+links, day notes and heartbeats are company-wide, like the plan itself.
+
+*Versioning.* Additive changes only within `v1.0`. A breaking change gets a new API version, and the
+web app keeps treating a missing endpoint as "extension too old" and hides the feature.
+
+*To do before anyone builds against it:* publish this contract as its own document (field-level,
+with examples), so a custom agent doesn't need to read our source.
+
+== Hosted Timmie
+
+=== Shape
+
+One multi-tenant worker service, run by KnowAll, that does the same jobs as the skill pack. It
+lives in `agent/worker/` on the same core as the skills and the MCP server. It has no chat, voice
+or email. That makes it much simpler than Poppie: a queue worker, not an agent platform.
+
+[source]
+----
+  Customer tenant A                 KnowAll (Azure)                    Customer tenant B
+ ┌──────────────────┐           ┌──────────────────────────┐          ┌──────────────────┐
+ │ Business Central │◄──S2S─────│  Timmie agent worker     │────S2S──►│ Business Central │
+ │  + Timmie ext.   │           │  (agent/worker/)         │          │  + Timmie ext.   │
+ ├──────────────────┤           │                          │          ├──────────────────┤
+ │ Graph: calendars │◄──────────│  scheduler → job queue   │─────────►│ Graph: calendars │
+ └──────────────────┘           │  per-tenant token cache  │          └──────────────────┘
+          ▲                     │  tenant registry ────────┼──► OrgSettings / Tenants table
+          │ users' own tokens   │  LLM calls (reviews)     │──► Azure OpenAI
+ ┌────────┴─────────┐           └──────────────────────────┘
+ │ Timmie web app   │   (no link to the worker: BC is the only contract)
+ │  usage meter ────┼──► Usage table
+ └──────────────────┘
+----
+
+=== Identity and onboarding
+
+* *One multi-tenant Entra app*, "Timmie Agent", separate from the web app's sign-in app.
+  Application permissions: Business Central `API.ReadWrite.All`, and Graph `Calendars.Read` plus
+  `OnlineMeetings.Read.All` and `OnlineMeetingArtifact.Read.All` to measure real meeting length
+  from attendance reports.
+* Admin consent is not enough for the meeting calls. Graph also wants the app in a Teams
+  *application access policy* (`Set-CsApplicationAccessPolicy` adds it), and that policy granted
+  to the people whose meetings it reads, or to everyone (`Grant-CsApplicationAccessPolicy`, with
+  `-Global` for the whole tenant). Adding the app to a policy nobody is granted still gets a
+  403 error. Without this Timmie still suggests from the calendar, with the booked length
+  rather than the attended one.
+* A customer admin onboards from *Settings > AI Agent > Timmie*:
+  . Click *Grant consent*: the standard Entra admin consent link for the Timmie Agent app.
+  . In BC, add the app under *Microsoft Entra Applications* and assign `D365 READ` and
+    `THYME AI AGENT`. Ideally the extension does this from a setup page, so it is one click.
+  . Choose the environments and companies Timmie should work in.
+  . The page waits for the first heartbeat and shows a green tick per company.
+  . Optional: add Timmie Agent to a Teams application access policy and grant it, for attended
+    meeting lengths.
+* Each step is checked and reported on the page, so the admin can see exactly what's missing
+  instead of a silent offline agent. The calendar check and the meeting-length check are separate
+  steps, so calendars can't show green while attendance reads fail.
+* GitHub and Azure DevOps signals are opt-in later steps: a *Timmie GitHub App* the customer
+  installs on their organisation, and the Timmie Agent service principal added to their DevOps
+  organisation with read access. People are matched by the GitHub username on their BC resource
+  and by UPN for DevOps.
+
+=== Finding work
+
+Poppie polls every company every minute. Across many tenants that's a lot of idle BC calls, so
+hosted Timmie should:
+
+* *Poll Business Central*, every few minutes per connected company, for requests in Requested.
+  There is no nudge from the web app: the web app never talks to an agent, and a hosted-only side
+  channel would turn one contract into two. If a few minutes proves too slow for "look again"
+  requests, the worker can subscribe to Business Central's own webhook notifications on the
+  request entities. That is still the BC API, and nothing the web app has to know about.
+* *Keep the scheduled sweeps* (midday and evening suggestions, the weekly plan review) per tenant
+  time zone, from the tenant registry rather than hard-coded Europe/London.
+* *Heartbeat* every minute per connected company as `TIMMIE`. The status text says what it is
+  doing ("Idle", "Working on 2 requests"), as Poppie's does today, or what is wrong, with the
+  prefix `Unavailable:` (for example "Unavailable: no access to calendars", "Unavailable:
+  subscription inactive").
+* *Unavailable is not online.* The web app reads the heartbeat's status as well as its age: a
+  fresh heartbeat whose status starts with `Unavailable:` shows the agent as *unavailable* with
+  that text, and the request buttons are disabled, instead of as online. Today
+  `src/utils/agentPresence.ts` checks only the name and the time, so this is a small web app
+  change, and it works for any agent, not only hosted Timmie.
+* *Reclaim stale work*: a request left Running for 30 minutes is picked up again, as now.
+
+=== Doing the work
+
+* Deterministic code first: request claiming, rounding, capacity, billable targets, holidays and
+  budget burn are plain code, as in Poppie's skills today. They cost no model tokens.
+* The model is used only for judgement: matching activity to projects when the links don't decide
+  it, and writing review summaries and notes.
+* Model calls go to Azure OpenAI in KnowAll's own Azure subscription, never the OpenAI API.
+  Customer data stays in Azure, isn't used for training, and each tenant has a token budget so
+  one tenant can't run up cost for everyone.
+* The skill pack's prompt-injection rules apply here too: timesheet text is information, never
+  instructions, and a job writes only to the time sheet it was given.
+* Holiday calendars, working week and time zone come from BC and the tenant registry, not code.
+
+=== Isolation and data handling
+
+* Tokens are per tenant and cached per tenant; a job only ever holds one tenant's token.
+* The worker stores no BC data beyond the life of a job. Logs carry IDs and counts, not
+  descriptions, names or hours.
+* Everything the agent writes is in the customer's own BC, under the agent's identity, so it can
+  be audited and removed there.
+* Offboarding: the customer removes consent and the BC app user; we delete the tenant registry
+  row and usage history after the billing period closes.
+* The privacy policy and terms need a section on the hosted agent before launch.
+
+== Your own agent
+
+Any agent that honours the contract above works. To connect one:
+
+. Give it an Entra app with BC API access, and in BC assign its app user `D365 READ` and
+  `THYME AI AGENT`, the same pair as hosted Timmie. The agent set alone gives a heartbeat that
+  works and reads of time sheets, resources and projects that fail.
+. Have it write a heartbeat under its own name.
+. In *Settings > AI Agent*, choose *Your own agent* and enter the same name. The web app matches
+  heartbeats on that name, so the panels go online.
+
+Both come from `agent/` in this repository, on the same core as hosted Timmie:
+
+* *The Hermes skill pack* (`agent/skills/`): timesheet review and time suggestions, without
+  Poppie's KnowAll-specific parts. This is what Poppie runs too.
+* *The MCP server* (`agent/mcp/`): the contract as tools (heartbeat, pending requests,
+  suggestions and reviews), so agents on other platforms can use it.
+
+We don't recommend pointing the web app at an OpenAI-compatible model endpoint instead. The jobs
+need scheduled work, credentials to calendars and code hosts, and writes into BC, which is agent
+work, not a chat call. It would also put model keys in the web app.
+
+Poppie becomes the first "own agent": KnowAll sets *Your own agent: Poppie*, she runs the skill
+pack from `agent/skills/`, and her KnowAll-only features (stand-ups, Teams DMs, the Monday digest,
+voice) stay in `poppie-hermes`.
+
+== Teams (later)
+
+A *Timmie bot* in Teams is the agent's front door to people, which the web app can't be:
+
+* Timesheet reminders at the end of the day or week, in each person's time zone.
+* Suggestion cards ("3 entries ready for Tuesday", with Accept / Review).
+* Approval cards for managers, carrying the timesheet review's verdict.
+* Personal and channel *tabs* that open the web app inside Teams.
+
+Tabs need `frame-ancestors` in the CSP (`src/proxy.ts`) relaxed to the Teams and Microsoft 365
+hosts, and sign-in through Nested App Authentication instead of a redirect. Both are web app
+changes and can ship before the bot.
+
+The bot belongs to the hosted agent: a customer on their own agent would bring their own bot.
+
+== Charging
+
+Hosted Timmie is charged per active user, in sats, as on the pricing page: 10,000 sats per user
+per month, and the agent is included.
+
+* *Who counts:* each person who signed in to hosted Timmie that month. That is the simplest thing
+  to track and the fairest: people who don't use Timmie aren't charged for. The web app's server
+  records it (tenant and user object ID, the same keys as the organisation settings) in a usage
+  table on sign-in. The count doesn't depend on which agent the organisation chose, so an
+  organisation on *Your own agent* or *None* is metered the same way as one on Timmie. The
+  worker can't be the meter: those organisations never give it access.
+* *Who pays:* the organisation, never the individual. Per user is only how the amount is worked
+  out. People using Timmie never see a bill, an invoice or a wallet.
+* *Credit account:* each organisation has a balance in sats, managed by its `Timmie.Admin` users
+  in a new *Settings > Billing* page (the admin centre). Nobody else sees it.
+* *Topping up:* the admin chooses an amount and pays a Lightning invoice shown on the page (QR
+  code and copy button). The credit lands as soon as the payment settles, with a receipt by email.
+* *Monthly charge:* on the first of each month the previous month's active users are counted and
+  the charge is taken from the balance. The page lists every top-up and charge, with the user
+  count behind each charge, like a bank statement.
+* *Running low:* the page shows how many months the balance covers at the current headcount. The
+  billing contacts are emailed when it covers less than a month, and again when a charge can't be
+  covered.
+* *Not enough credit:* the charge is taken anyway, so the balance can go below zero for a grace
+  period. During it, everyone sees a banner saying the account needs topping up, and admins get a
+  link to *Settings > Billing*. If it isn't topped up by then, the organisation is *suspended*, whichever agent it
+  uses: the web app's server reports the organisation's standing with its settings, which the
+  app loads on sign-in (the same place it meters active users), on every page load and at least
+  every 15 minutes while a session is open. So a suspension reaches people already signed in
+  within 15 minutes, not only at their next sign-in. Suspended, the app shows everyone a
+  "suspended" page, with *Settings > Billing* still open to admins so they can top up. Hosted
+  Timmie also skips the tenant and sets its heartbeat status to "Unavailable: subscription
+  inactive" (see _Finding work_). No monthly charge is taken while the balance is below zero,
+  in the grace period or suspended, so the debt is never more than the one unpaid month however
+  long the grace period is. Data in BC is untouched throughout.
+* *Coming back:* the organisation is reactivated when the balance is back above zero, not on
+  any payment. A top-up smaller than the debt reduces it, and the page says how much more is
+  needed. The next monthly charge then runs as normal; the months spent below zero are not
+  charged for afterwards.
+* *Auto top-up (later):* the admin connects a wallet with Nostr Wallet Connect and a spending
+  limit, and the balance is topped up automatically when it runs low.
+* *Fiat (later):* a Microsoft marketplace (transactable SaaS) listing could add card or invoice
+  billing, again billed to the organisation.
+* *Leaving:* unused credit is refunded to a Lightning address the admin gives us.
+* *Your own agent* costs nothing extra; self-hosted stays free.
+
+== Open questions
+
+* Where the hosted worker runs: Container Apps jobs, Functions or a small always-on container.
+  Depends on how cheap idle is versus start-up time for a review.
+* Whether the BC extension should create the agent's app user itself from a setup page, which
+  removes the fiddliest onboarding step.
+* How long the grace period is.
+* Whether credit is held in sats only, or the price is fixed in fiat and converted at top-up.
+* Trial terms: how long, and whether the agent is in the trial.
+* Whether polling every few minutes is fine for the first customers, or "look again" requests
+  need BC webhook notifications from the start.
+* Name collisions: a custom agent called "Timmie" would look like ours. Possibly reserve the name.
+
+== Rollout (when we build it)
+
+. Publish the contract document. Move the timesheet review and time suggestion skills into
+  `agent/skills/` on one shared core, with the prompt-injection rules, and build the MCP server
+  in `agent/mcp/` on the same core. Point Poppie at the pack.
+. Teach the web app the `Unavailable:` heartbeat status.
+. Build the hosted worker in `agent/worker/`, with requests, reviews and calendar suggestions,
+  for one test tenant.
+. Add the onboarding page with per-step checks.
+. Add GitHub and Azure DevOps signals.
+. Teams tabs, then the Teams bot.
+. Usage metering and Lightning invoicing; then a store listing.
