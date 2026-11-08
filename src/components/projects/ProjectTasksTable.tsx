@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback, Fragment } from 'react';
 import Link from 'next/link';
 import { flushSync } from 'react-dom';
-import { parseISO } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { useProjectDetailsStore } from '@/hooks/useProjectDetailsStore';
 import { useCompanyPath } from '@/hooks/useCompanyPath';
 import { Card } from '@/components/ui';
@@ -13,6 +13,7 @@ import {
   getBCJobTaskUrl,
   buildReportQuery,
   customPeriod,
+  periodOf,
   NO_REPORT_FILTER,
 } from '@/utils';
 import type { ReportStage } from '@/utils';
@@ -24,12 +25,19 @@ import {
   ChevronDoubleDownIcon,
   ChevronDoubleUpIcon,
   ChevronUpIcon,
+  CalendarIcon,
 } from '@heroicons/react/24/outline';
 import { useAuth, resolveResourceIdentity } from '@/services/auth';
 import { bcClient } from '@/services/bc';
 import { useCompanyStore } from '@/hooks/useCompanyStore';
 
-type GroupBy = 'task' | 'team';
+type GroupBy = 'month' | 'task' | 'team';
+
+const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
+  { value: 'month', label: 'By Month' },
+  { value: 'task', label: 'By Task' },
+  { value: 'team', label: 'By Team' },
+];
 
 type StatusKey = 'hours' | 'postedHours' | 'approvedHours' | 'submittedHours' | 'unsubmittedHours';
 type StatusRow = Record<StatusKey, number>;
@@ -63,10 +71,11 @@ const COLUMN_STAGES: Record<StatusKey, ReportStage | null> = {
   hours: null,
 };
 
-/** Who and what a row's hours are for: its task, its person, or both */
+/** Who, what and when a row's hours are for: its task, its person, its month (YYYY-MM) */
 interface EntriesScope {
   taskNo?: string;
   resourceNo?: string;
+  month?: string;
 }
 
 /** The Reports link listing the entries behind a cell, or null for none */
@@ -244,7 +253,7 @@ export function ProjectTasksTable() {
   // day to its last (the table covers all of it), for the row's task and person and
   // the column's stage
   const entriesHref = useCallback<EntriesHref>(
-    ({ taskNo, resourceNo }, key) => {
+    ({ taskNo, resourceNo, month }, key) => {
       // Time on no task can't be picked by task on Reports
       if (!projectNumber || !firstEntryDate || !lastEntryDate || taskNo === 'no-task') {
         return null;
@@ -252,7 +261,9 @@ export function ProjectTasksTable() {
       const stage = COLUMN_STAGES[key];
       const query = buildReportQuery({
         view: 'entries',
-        period: customPeriod(parseISO(firstEntryDate), parseISO(lastEntryDate)),
+        period: month
+          ? periodOf('month', parseISO(`${month}-01`))
+          : customPeriod(parseISO(firstEntryDate), parseISO(lastEntryDate)),
         filter: {
           ...NO_REPORT_FILTER,
           projectNos: [projectNumber],
@@ -329,6 +340,10 @@ export function ProjectTasksTable() {
 
   const taskBreakdown = useMemo(() => analytics?.taskBreakdown ?? [], [analytics?.taskBreakdown]);
   const teamBreakdown = useMemo(() => analytics?.teamBreakdown ?? [], [analytics?.teamBreakdown]);
+  const monthBreakdown = useMemo(
+    () => analytics?.monthBreakdown ?? [],
+    [analytics?.monthBreakdown]
+  );
 
   // Get all expandable keys for the current view
   const expandableKeys = useMemo(() => {
@@ -336,12 +351,16 @@ export function ProjectTasksTable() {
       return taskBreakdown
         .filter((item) => item.teamMembers && item.teamMembers.length > 0)
         .map((item) => item.taskNo);
-    } else {
-      return teamBreakdown
-        .filter((item) => item.tasks && item.tasks.length > 0)
-        .map((item) => item.resourceNo);
     }
-  }, [groupBy, taskBreakdown, teamBreakdown]);
+    if (groupBy === 'month') {
+      return monthBreakdown
+        .filter((item) => item.tasks && item.tasks.length > 0)
+        .map((item) => item.month);
+    }
+    return teamBreakdown
+      .filter((item) => item.tasks && item.tasks.length > 0)
+      .map((item) => item.resourceNo);
+  }, [groupBy, taskBreakdown, teamBreakdown, monthBreakdown]);
 
   // Check if all items are expanded
   const allExpanded = expandableKeys.length > 0 && expandableKeys.every((key) => expanded[key]);
@@ -375,39 +394,42 @@ export function ProjectTasksTable() {
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-white">Breakdown</h2>
         <div className="flex gap-2 print:hidden">
-          <button
-            onClick={() => {
-              setGroupBy('task');
-              setSort(null);
-            }}
-            className={cn(
-              'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
-              groupBy === 'task'
-                ? 'bg-timmie-600 text-dark-950'
-                : 'bg-dark-600 text-gray-400 hover:text-white'
-            )}
-          >
-            By Task
-          </button>
-          <button
-            onClick={() => {
-              setGroupBy('team');
-              setSort(null);
-            }}
-            className={cn(
-              'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
-              groupBy === 'team'
-                ? 'bg-timmie-600 text-dark-950'
-                : 'bg-dark-600 text-gray-400 hover:text-white'
-            )}
-          >
-            By Team
-          </button>
+          {GROUP_BY_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              onClick={() => {
+                setGroupBy(option.value);
+                setSort(null);
+              }}
+              aria-pressed={groupBy === option.value}
+              className={cn(
+                'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
+                groupBy === option.value
+                  ? 'bg-timmie-600 text-dark-950'
+                  : 'bg-dark-600 text-gray-400 hover:text-white'
+              )}
+            >
+              {option.label}
+            </button>
+          ))}
         </div>
       </div>
 
       {/* Table - print whichever view the user has selected */}
-      {groupBy === 'task' ? (
+      {groupBy === 'month' ? (
+        <MonthBreakdownTable
+          data={monthBreakdown}
+          tasks={tasks}
+          sort={sort}
+          onSort={setSort}
+          expanded={expanded}
+          toggleExpanded={toggleExpanded}
+          companyName={companyName}
+          projectNumber={projectNumber}
+          printExpandAll={isPrinting}
+          entriesHref={entriesHref}
+        />
+      ) : groupBy === 'task' ? (
         <TaskBreakdownTable
           data={taskBreakdown}
           tasks={tasks}
@@ -806,6 +828,143 @@ function TeamBreakdownTable({
                           row={task}
                           variant="sub"
                           scope={{ taskNo: task.taskNo, resourceNo: item.resourceNo }}
+                          entriesHref={entriesHref}
+                        />
+                      </tr>
+                    ))}
+              </Fragment>
+            );
+          })}
+        </tbody>
+        <tfoot className="bg-dark-700">
+          <tr>
+            <td className="px-4 py-3 font-medium text-white">Total</td>
+            <StatusCells row={totals} variant="total" scope={{}} entriesHref={entriesHref} />
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
+interface MonthBreakdownItem extends StatusRow {
+  month: string; // YYYY-MM
+  tasks?: (StatusRow & {
+    taskNo: string;
+    description: string;
+  })[];
+}
+
+function MonthBreakdownTable({
+  data,
+  tasks,
+  sort,
+  onSort,
+  expanded,
+  toggleExpanded,
+  companyName,
+  projectNumber,
+  printExpandAll = false,
+  entriesHref,
+}: {
+  data: MonthBreakdownItem[];
+  tasks: TaskFromStore[];
+  sort: SortState;
+  onSort: (sort: SortState) => void;
+  expanded: ExpandedState;
+  toggleExpanded: (key: string) => void;
+  companyName?: string;
+  projectNumber?: string;
+  printExpandAll?: boolean;
+  entriesHref: EntriesHref;
+}) {
+  if (data.length === 0) {
+    return (
+      <div className="py-12 text-center">
+        <CalendarIcon className="text-dark-600 mx-auto mb-4 h-12 w-12" />
+        <p className="text-dark-400">No time entries for this project</p>
+      </div>
+    );
+  }
+
+  const taskMap = new Map(tasks.map((t) => [t.code, t]));
+  // Unsorted, months run oldest first (YYYY-MM compares as text)
+  const rows = sortRows(data, sort, (a, b) => a.month.localeCompare(b.month));
+  const totals = sumStatus(data);
+
+  return (
+    <div className="border-dark-600 overflow-hidden rounded-lg border">
+      <table className="w-full">
+        <thead className="bg-dark-700">
+          <SortableHeaders firstLabel="Month" sort={sort} onSort={onSort} />
+        </thead>
+        <tbody className="divide-dark-600 divide-y">
+          {rows.map((item) => {
+            const hasDetails = item.tasks && item.tasks.length > 0;
+            const isExpanded = printExpandAll || expanded[item.month];
+
+            return (
+              <Fragment key={item.month}>
+                <tr
+                  className={cn(
+                    'transition-colors',
+                    hasDetails && 'hover:bg-dark-700/50 cursor-pointer'
+                  )}
+                  onClick={() => hasDetails && toggleExpanded(item.month)}
+                >
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      {hasDetails && (
+                        <span className="text-gray-500 print:hidden">
+                          {isExpanded ? (
+                            <ChevronDownIcon className="h-4 w-4" />
+                          ) : (
+                            <ChevronRightIcon className="h-4 w-4" />
+                          )}
+                        </span>
+                      )}
+                      <span className="text-white">
+                        {format(parseISO(`${item.month}-01`), 'MMMM yyyy')}
+                      </span>
+                    </div>
+                  </td>
+                  <StatusCells
+                    row={item}
+                    variant="row"
+                    scope={{ month: item.month }}
+                    entriesHref={entriesHref}
+                  />
+                </tr>
+                {/* Expanded details, in BC's task order */}
+                {isExpanded &&
+                  [...(item.tasks ?? [])]
+                    .sort((a, b) => compareTaskNo(a.taskNo, b.taskNo, tasks))
+                    .map((task) => (
+                      <tr key={`${item.month}-${task.taskNo}`} className="bg-dark-800/50">
+                        <td className="py-2 pr-4 pl-12">
+                          <div className="flex items-center gap-1">
+                            <span className="font-mono text-xs text-gray-500">{task.taskNo}</span>
+                            <span className="ml-1 text-sm text-gray-400">
+                              {taskMap.get(task.taskNo)?.name || task.description}
+                            </span>
+                            {projectNumber && task.taskNo !== 'no-task' && (
+                              <a
+                                href={getBCJobTaskUrl(projectNumber, task.taskNo, companyName)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="hover:text-timmie-400 text-gray-500 print:hidden"
+                                title="Open task in Business Central"
+                              >
+                                <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
+                              </a>
+                            )}
+                          </div>
+                        </td>
+                        <StatusCells
+                          row={task}
+                          variant="sub"
+                          scope={{ taskNo: task.taskNo, month: item.month }}
                           entriesHref={entriesHref}
                         />
                       </tr>
